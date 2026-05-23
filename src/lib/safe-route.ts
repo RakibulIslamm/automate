@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { type ZodError, type ZodType } from 'zod';
 import { AppError, RateLimitError, ValidationError } from './errors';
+import { logError } from './tracking/log-error';
 
 /**
  * Wrap a Next.js route handler so it never leaks stack traces or unhandled
@@ -45,7 +46,7 @@ export function safeRoute<TInput, TOutput>(opts: SafeRouteOptions<TInput, TOutpu
       if (result instanceof NextResponse) return result;
       return NextResponse.json({ data: result });
     } catch (err) {
-      return handleRouteError(err);
+      return handleRouteError(err, req);
     }
   };
 }
@@ -57,7 +58,7 @@ async function extractInput(req: NextRequest): Promise<unknown> {
   return req.json().catch(() => ({}));
 }
 
-function handleRouteError(err: unknown): NextResponse {
+async function handleRouteError(err: unknown, req: NextRequest): Promise<NextResponse> {
   if (err instanceof ValidationError) {
     return jsonError(
       { code: err.code, message: err.publicMessage, fields: err.fields },
@@ -67,9 +68,9 @@ function handleRouteError(err: unknown): NextResponse {
 
   if (err instanceof AppError) {
     if (err.statusCode >= 500) {
-      // TODO(Phase 3): persist to ErrorLog model
       // eslint-disable-next-line no-console
       console.error(`[${err.code}]`, err);
+      await logError(err, { source: 'safe-route', ...routeContext(req) });
     }
     const res = jsonError({ code: err.code, message: err.publicMessage }, err.statusCode);
     if (err instanceof RateLimitError && err.retryAfterSeconds) {
@@ -78,10 +79,18 @@ function handleRouteError(err: unknown): NextResponse {
     return res;
   }
 
-  // TODO(Phase 3): persist to ErrorLog model
   // eslint-disable-next-line no-console
   console.error('[UNHANDLED_ROUTE_ERROR]', err);
+  await logError(err, { source: 'safe-route', ...routeContext(req) });
   return jsonError({ code: 'INTERNAL_ERROR', message: 'Something went wrong.' }, 500);
+}
+
+function routeContext(req: NextRequest): { url: string; method: string; userAgent?: string } {
+  return {
+    url: req.nextUrl.pathname + req.nextUrl.search,
+    method: req.method,
+    userAgent: req.headers.get('user-agent') ?? undefined,
+  };
 }
 
 function jsonError(error: RouteErrorBody['error'], status: number): NextResponse {

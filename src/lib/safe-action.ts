@@ -1,5 +1,6 @@
 import { z, type ZodError, type ZodType } from 'zod';
 import { AppError, ValidationError } from './errors';
+import { logError } from './tracking/log-error';
 
 /**
  * Wrap a server action so it never throws to the client. Returns a tagged
@@ -39,28 +40,28 @@ export function safeAction<TInput, TOutput>(
       const data = await fn(parsed.data);
       return { ok: true, data };
     } catch (err) {
-      return { ok: false, error: toActionError(err) };
+      return { ok: false, error: await toActionError(err) };
     }
   };
 }
 
-function toActionError(err: unknown): ActionError {
+async function toActionError(err: unknown): Promise<ActionError> {
   if (err instanceof ValidationError) {
     return { code: err.code, message: err.publicMessage, fields: err.fields };
   }
 
   if (err instanceof AppError) {
     if (err.statusCode >= 500) {
-      // TODO(Phase 3): persist to ErrorLog model
       // eslint-disable-next-line no-console
       console.error(`[${err.code}]`, err);
+      await logError(err, { source: 'safe-action' });
     }
     return { code: err.code, message: err.publicMessage };
   }
 
-  // TODO(Phase 3): persist to ErrorLog model
   // eslint-disable-next-line no-console
   console.error('[UNHANDLED_ACTION_ERROR]', err);
+  await logError(err, { source: 'safe-action' });
   return { code: 'INTERNAL_ERROR', message: 'Something went wrong. Please try again.' };
 }
 
