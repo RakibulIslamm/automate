@@ -42,9 +42,15 @@ const serverSchema = z.object({
     .regex(/^[0-9a-f]{64}$/i, 'ENCRYPTION_KEY must be 64 hex chars (32 bytes). Generate with: openssl rand -hex 32'),
   WORKFLOW_SIGNING_SECRET: z.string().min(16, 'WORKFLOW_SIGNING_SECRET must be at least 16 chars'),
 
-  // Integration OAuth (Arctic)
+  // Integration OAuth (Arctic) — separate apps from Auth.js sign-in
+  GOOGLE_CLIENT_ID: z.string().min(1),
+  GOOGLE_CLIENT_SECRET: z.string().min(1),
   SLACK_CLIENT_ID: z.string().min(1),
   SLACK_CLIENT_SECRET: z.string().min(1),
+  // Optional HTTPS override for Slack's callback. Slack refuses bot scopes
+  // for non-HTTPS redirect URIs, so local dev needs a tunnel (ngrok, etc.).
+  // Set to e.g. `https://abc123.ngrok.app/api/oauth/slack/callback`.
+  SLACK_REDIRECT_URI: z.url('SLACK_REDIRECT_URI must be a valid URL').optional(),
   NOTION_CLIENT_ID: z.string().min(1),
   NOTION_CLIENT_SECRET: z.string().min(1),
 });
