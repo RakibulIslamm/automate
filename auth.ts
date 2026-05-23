@@ -57,42 +57,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     /**
-     * Populate the JWT with our app fields. `user` is only present on the
-     * initial sign-in callback; subsequent requests just pass the existing
-     * token through.
+     * Refresh the JWT from the DB on every call. `user` is present only on
+     * the initial sign-in; on subsequent calls we still re-fetch using
+     * `token.email` so role/plan changes (e.g., flipping `isAdmin: true` in
+     * Atlas) propagate without forcing the user to sign out and back in.
+     *
+     * Cost: one indexed Mongo read per server-side auth() call (one per
+     * server-rendered page). Acceptable for correctness; we can add a TTL
+     * cache later if it shows up in profiles.
      */
-    async jwt({ token, user }) {
-      if (user?.email) {
-        try {
-          await connectDb();
-          const dbUser = await User.findOne({ email: user.email.toLowerCase() })
-            .select('_id plan isAdmin')
-            .lean<{ _id: unknown; plan?: Plan; isAdmin?: boolean }>();
-          if (dbUser) {
-            token.id = String(dbUser._id);
-            if (dbUser.plan) token.plan = dbUser.plan;
-            if (typeof dbUser.isAdmin === 'boolean') token.isAdmin = dbUser.isAdmin;
-          }
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error('[auth.jwt] failed to enrich token', err);
+    async jwt({ token, user, trigger }) {
+      const email =
+        user?.email ?? (typeof token.email === 'string' ? token.email : undefined);
+      if (!email) return token;
+
+      // Always refresh on sign-in / explicit update; otherwise refresh too
+      // (cheap, and the alternative is a 30-day stale token).
+      try {
+        await connectDb();
+        const dbUser = await User.findOne({ email: email.toLowerCase() })
+          .select('_id plan isAdmin')
+          .lean<{ _id: unknown; plan?: Plan; isAdmin?: boolean }>();
+        if (dbUser) {
+          token.id = String(dbUser._id);
+          token.plan = dbUser.plan ?? 'free';
+          token.isAdmin = !!dbUser.isAdmin;
         }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[auth.jwt] failed to refresh token from DB', { trigger, err });
+        // Don't blow up the request — fall through with whatever's already in token.
       }
       return token;
     },
 
-    /**
-     * Project the token's app fields onto `session.user` so server components
-     * and client `useSession()` see them.
-     */
-    session({ session, token }) {
-      if (session.user && token) {
-        if (typeof token.id === 'string') session.user.id = token.id;
-        // JWT extends Record<string, unknown> so augmented fields read as unknown.
-        if (token.plan) session.user.plan = token.plan as Plan;
-        if (typeof token.isAdmin === 'boolean') session.user.isAdmin = token.isAdmin;
-      }
-      return session;
-    },
+    // session callback is shared from `auth.config.ts` via `...authConfig.callbacks`.
+    // Keeping the projection in one place means the Edge proxy and Node code
+    // see the exact same `session.user` shape.
   },
 });

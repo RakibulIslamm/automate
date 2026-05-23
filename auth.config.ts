@@ -15,11 +15,28 @@ import Google from 'next-auth/providers/google';
 const PUBLIC_PATHS = ['/', '/sign-in', '/sign-up', '/pricing'];
 const PUBLIC_PREFIXES = ['/legal/', '/api/auth/'];
 const PUBLIC_EXACT = new Set(['/api/internal/health']);
+const AUTH_PAGES = new Set(['/sign-in', '/sign-up']);
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true;
   if (PUBLIC_PATHS.includes(pathname)) return true;
   return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+/**
+ * Resolve `?callbackUrl=…` for signed-in users bouncing off /sign-in. We only
+ * honour same-origin destinations to avoid open redirects via crafted links.
+ */
+function safeCallback(url: URL, fallback: string): string {
+  const raw = url.searchParams.get('callbackUrl');
+  if (!raw) return fallback;
+  try {
+    const target = new URL(raw, url.origin);
+    if (target.origin === url.origin) return target.pathname + target.search + target.hash;
+  } catch {
+    // ignore malformed input
+  }
+  return fallback;
 }
 
 export default {
@@ -46,14 +63,47 @@ export default {
   },
   session: { strategy: 'jwt' },
   callbacks: {
+    /**
+     * Project our custom JWT fields (`id`, `plan`, `isAdmin`) onto
+     * `session.user` so they're visible in BOTH the Edge proxy and Node
+     * server code. Without this callback the proxy sees `session.user`
+     * with only the default OIDC fields (name, email, image), so the
+     * `isAdmin` check below is silently always false.
+     */
+    session({ session, token }) {
+      if (session.user) {
+        if (typeof token.id === 'string') session.user.id = token.id;
+        if (typeof token.plan === 'string') {
+          session.user.plan = token.plan as typeof session.user.plan;
+        }
+        if (typeof token.isAdmin === 'boolean') session.user.isAdmin = token.isAdmin;
+      }
+      return session;
+    },
+
     authorized({ auth, request }) {
-      const { pathname } = request.nextUrl;
+      const url = request.nextUrl;
+      const pathname = url.pathname;
+      const isLoggedIn = !!auth?.user;
+      const isAdmin = auth?.user?.isAdmin === true;
+
+      // Bounce signed-in users out of the auth pages — they don't need to
+      // sign in again. Honor `?callbackUrl=` when it's same-origin.
+      if (isLoggedIn && AUTH_PAGES.has(pathname)) {
+        return NextResponse.redirect(new URL(safeCallback(url, '/dashboard'), url.origin));
+      }
+
       if (isPublicPath(pathname)) return true;
 
-      const isLoggedIn = !!auth?.user;
-
       if (pathname.startsWith('/admin')) {
-        return isLoggedIn && auth?.user?.isAdmin === true;
+        if (!isLoggedIn) return false; // → /sign-in?callbackUrl=/admin/...
+        if (!isAdmin) {
+          // Signed in but not an admin — send to /dashboard instead of
+          // /sign-in. Returning false here would loop a callbackUrl back to
+          // /admin → /sign-in → /admin forever.
+          return NextResponse.redirect(new URL('/dashboard', url.origin));
+        }
+        return true;
       }
 
       // Default: protected. Return false → middleware redirects to signIn page.
