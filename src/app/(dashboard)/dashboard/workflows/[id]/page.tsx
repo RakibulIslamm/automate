@@ -59,6 +59,21 @@ export default async function WorkflowDetailPage({ params }: Props) {
   // page (it just renders an empty flow with a helpful hint).
   const defResult = workflowDefinitionSchema.safeParse(doc.definition);
   const definition: WorkflowDefinition | null = defResult.success ? defResult.data : null;
+  if (!defResult.success) {
+    // eslint-disable-next-line no-console
+    console.error(
+      '[workflow-detail] definition failed schema re-parse',
+      JSON.stringify(
+        {
+          workflowId: String(doc._id),
+          issues: defResult.error.issues,
+          storedDefinition: doc.definition,
+        },
+        null,
+        2,
+      ),
+    );
+  }
 
   const status = doc.status as WorkflowStatus;
 

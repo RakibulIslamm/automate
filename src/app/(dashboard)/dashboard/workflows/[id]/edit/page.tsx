@@ -32,6 +32,19 @@ export default async function EditWorkflowPage({
   // friendly explainer instead of crashing the editor.
   const parsed = workflowDefinitionSchema.safeParse(doc.definition);
   if (!parsed.success) {
+    // eslint-disable-next-line no-console
+    console.error(
+      '[workflow-edit] definition failed schema re-parse',
+      JSON.stringify(
+        {
+          workflowId: String(doc._id),
+          issues: parsed.error.issues,
+          storedDefinition: doc.definition,
+        },
+        null,
+        2,
+      ),
+    );
     return (
       <>
         <PageHeader

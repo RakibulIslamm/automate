@@ -97,6 +97,7 @@ Uploads a file to Google Drive.
 ### ai.transform
 Runs a separate model call to massage data.
 - config: \`{ instruction: string, inputFrom: string }\`
+- Output shape: \`{ text: string, usage: { inputTokens, outputTokens }, costUsd: number }\`. ALWAYS reference the model's response via \`{{<step_id>.text}}\` — never the bare \`{{<step_id>}}\`, which would JSON-stringify the whole object (token counts and all) into your downstream message.
 - Use this for "summarize", "extract", "rewrite as a friendly message", etc.
 
 ### condition.if
@@ -112,8 +113,10 @@ At execution time each step's output becomes available under its \`id\`:
 - \`{{trigger.message.subject}}\`, \`{{trigger.message.from}}\`, \`{{trigger.message.snippet}}\`.
 - \`{{<step_id>.<field>}}\` — output of a previous step. Examples:
   - \`{{attachments.items[0]}}\` after a \`gmail.get_attachments\` step with id \`attachments\`.
-  - \`{{summary}}\` when an \`ai.transform\` step has id \`summary\` (the step's output is a string).
+  - \`{{summary.text}}\` when an \`ai.transform\` step has id \`summary\` (the step's output is an object — \`.text\` is the model's response string).
   - \`{{upload.webViewLink}}\` from a \`drive.upload_file\` step with id \`upload\`.
+
+Never reference an \`ai.transform\` step as a bare \`{{step_id}}\` — that resolves to the whole output object (\`{ text, usage, costUsd }\`) and gets JSON-stringified into your downstream config. Always drill in: \`{{step_id.text}}\`.
 
 Forward references are illegal — a step can only reference itself or steps that already ran.
 

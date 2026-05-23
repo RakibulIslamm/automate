@@ -61,10 +61,24 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<void
   // shape across schema migrations.
   const parsed = workflowDefinitionSchema.safeParse(workflow.definition);
   if (!parsed.success) {
+    // eslint-disable-next-line no-console
+    console.error(
+      '[executor] definition failed schema re-parse',
+      JSON.stringify(
+        {
+          workflowId: String(workflowId),
+          runId: String(runId),
+          issues: parsed.error.issues,
+          storedDefinition: workflow.definition,
+        },
+        null,
+        2,
+      ),
+    );
     await markFailure(
       run,
       'INVALID_DEFINITION',
-      'Stored workflow definition no longer matches the schema. Re-create the workflow.',
+      'This workflow can\'t run yet — open it from the workflows list to repair it.',
     );
     return;
   }

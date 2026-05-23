@@ -33,9 +33,15 @@ export const TRIGGER_TYPES = [
 ] as const;
 export type TriggerType = (typeof TRIGGER_TYPES)[number];
 
+/**
+ * `config` defaults to `{}` here because both the LLM and Mongoose's Mixed
+ * storage like to drop empty objects. The AI occasionally emits just
+ * `{ type: 'manual' }`, and Mongoose can strip empty embedded docs from
+ * Mixed fields on save. Defaulting keeps the round-trip lossless.
+ */
 export const manualTriggerSchema = z.object({
   type: z.literal('manual'),
-  config: z.object({}).strict(),
+  config: z.object({}).strict().default({}),
 });
 
 export const scheduleCronTriggerSchema = z.object({

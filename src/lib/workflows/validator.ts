@@ -55,6 +55,7 @@ export function validateWorkflow(
     errors,
     seenIds,
     allowedRefs,
+    idToType: new Map(),
   });
 
   if (errors.length > 0) return { ok: false, errors };
@@ -66,6 +67,14 @@ interface WalkCtx {
   errors: string[];
   seenIds: Set<string>;
   allowedRefs: Set<string>;
+  /**
+   * Map of step id → step type, so `checkTemplateRefs` can warn when a
+   * downstream template references an `ai.transform` step bare
+   * (`{{step}}` resolves to the WHOLE output object and gets
+   * JSON-stringified into the next step's config — almost never what
+   * the author wants; they meant `{{step.text}}`).
+   */
+  idToType: Map<string, Step['type']>;
 }
 
 function walk(steps: Step[], ctx: WalkCtx): void {
@@ -75,6 +84,7 @@ function walk(steps: Step[], ctx: WalkCtx): void {
     } else {
       ctx.seenIds.add(step.id);
     }
+    ctx.idToType.set(step.id, step.type);
 
     checkIntegrationId(step, ctx);
     checkTemplateRefs(step, ctx);
@@ -126,11 +136,23 @@ function readIntegrationId(step: Step): string | undefined {
 
 function checkTemplateRefs(step: Step, ctx: WalkCtx): void {
   forEachTemplateRef(step, (ref) => {
-    const root = ref.split('.')[0]?.split('[')[0];
+    const trimmed = ref.trim();
+    const root = trimmed.split('.')[0]?.split('[')[0];
     if (!root) return;
     if (!ctx.allowedRefs.has(root)) {
       ctx.errors.push(
         `Step "${step.id}": template "{{${ref}}}" refers to "${root}", which doesn't exist before this step.`,
+      );
+      return;
+    }
+    // Catch the common "I forgot .text" mistake on ai.transform outputs.
+    // A bare `{{step_id}}` reference (no `.field` or `[index]`) resolves to
+    // the WHOLE output object, which gets JSON-stringified downstream —
+    // almost never what the author intended.
+    const isBareReference = trimmed === root;
+    if (isBareReference && ctx.idToType.get(root) === 'ai.transform') {
+      ctx.errors.push(
+        `Step "${step.id}": template "{{${root}}}" references the whole \`ai.transform\` output (token counts and all). Use "{{${root}.text}}" instead.`,
       );
     }
   });
