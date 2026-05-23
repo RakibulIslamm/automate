@@ -4,12 +4,11 @@ import { notFound } from 'next/navigation';
 import { Types } from 'mongoose';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
-  Play,
   Pencil,
   CheckCircle2,
   PauseCircle,
   AlertTriangle,
-  Hourglass,
+  History,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,13 +20,24 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { EmptyState } from '@/components/states/empty-state';
 import { PageHeader } from '@/components/layout/page-header';
 import { requireUser } from '@/lib/auth/guards';
 import { connectDb } from '@/lib/db/connect';
-import { Workflow, type WorkflowStatus } from '@/lib/db/models';
+import {
+  Integration,
+  Workflow,
+  WorkflowRun,
+  WORKFLOW_RUN_STATUSES,
+  type IntegrationStatus,
+  type WorkflowStatus,
+  type WorkflowRunStatus,
+} from '@/lib/db/models';
 import { workflowDefinitionSchema, type WorkflowDefinition } from '@/lib/workflows/dsl';
 import { WorkflowFlowchart } from '@/components/workflows/workflow-flowchart';
 import { WorkflowSettingsActions } from '@/components/workflows/workflow-settings-actions';
+import { RunNowButton } from '@/components/workflows/run-now-button';
+import { RunRow, type RunRowData } from '@/components/runs/run-row';
 
 export const metadata: Metadata = { title: 'Workflow' };
 
@@ -52,6 +62,33 @@ export default async function WorkflowDetailPage({ params }: Props) {
 
   const status = doc.status as WorkflowStatus;
 
+  // Run-now eligibility: every integration referenced by the workflow must
+  // be currently active. We only block when we can prove a problem; missing
+  // detection still lets the user click through and see the executor's
+  // friendly failure message.
+  const blockReason = definition
+    ? await checkIntegrationsHealthy(definition, String(user._id))
+    : null;
+
+  // Fetch this workflow's runs for the Runs tab.
+  const runDocs = await WorkflowRun.find({ workflowId: doc._id, userId: user._id })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+  const runs: RunRowData[] = runDocs.map((r) => ({
+    id: String(r._id),
+    workflowId: String(r.workflowId),
+    workflowName: doc.name,
+    status: (WORKFLOW_RUN_STATUSES.includes(r.status as WorkflowRunStatus)
+      ? r.status
+      : 'queued') as WorkflowRunStatus,
+    createdAt: (r.createdAt instanceof Date ? r.createdAt : new Date()).toISOString(),
+    startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
+    completedAt: r.completedAt ? new Date(r.completedAt).toISOString() : null,
+    durationMs: typeof r.durationMs === 'number' ? r.durationMs : null,
+    costUsd: typeof r.costUsd === 'number' ? r.costUsd : null,
+  }));
+
   return (
     <>
       <PageHeader
@@ -60,10 +97,11 @@ export default async function WorkflowDetailPage({ params }: Props) {
         action={
           <div className="flex items-center gap-2">
             <StatusBadge status={status} />
-            <Button variant="outline" disabled title="Run on demand lands in Phase 11">
-              <Play className="size-4" />
-              Run now
-            </Button>
+            <RunNowButton
+              workflowId={String(doc._id)}
+              disabled={blockReason !== null}
+              disabledReason={blockReason ?? undefined}
+            />
           </div>
         }
       />
@@ -134,18 +172,23 @@ export default async function WorkflowDetailPage({ params }: Props) {
         </TabsContent>
 
         <TabsContent value="runs" className="mt-6">
-          <Card>
-            <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-              <div className="rounded-full bg-muted p-4 text-muted-foreground">
-                <Hourglass className="size-7" aria-hidden />
-              </div>
-              <h3 className="font-serif text-xl tracking-tight">Run history coming in Phase 11</h3>
-              <p className="max-w-md text-sm text-muted-foreground">
-                Once the execution engine ships, every run will show up here with its result, AI cost,
-                and step-by-step logs.
-              </p>
-            </CardContent>
-          </Card>
+          {runs.length === 0 ? (
+            <Card>
+              <CardContent className="p-0">
+                <EmptyState
+                  icon={<History className="h-8 w-8" aria-hidden />}
+                  title="No runs yet"
+                  description="Trigger this workflow with “Run now” to start collecting history."
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {runs.map((run) => (
+                <RunRow key={run.id} run={run} hideWorkflow />
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="settings" className="mt-6 space-y-4">
@@ -166,7 +209,7 @@ export default async function WorkflowDetailPage({ params }: Props) {
               <CardHeader>
                 <CardTitle className="font-serif text-lg tracking-tight">Schedule</CardTitle>
                 <CardDescription>
-                  Edit the schedule in the full editor (Phase 10).
+                  Edit the cron expression and timezone from the full editor.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-1 text-sm">
@@ -244,4 +287,59 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Walk the workflow definition collecting every referenced integration id,
+ * then load those Integration docs and return a user-facing reason string
+ * if any are not currently `active`. Returning null means Run now is safe.
+ */
+async function checkIntegrationsHealthy(
+  definition: WorkflowDefinition,
+  userId: string,
+): Promise<string | null> {
+  const ids = collectIntegrationIds(definition);
+  if (ids.size === 0) return null;
+
+  const docs = await Integration.find({
+    userId: new Types.ObjectId(userId),
+    _id: { $in: Array.from(ids).map((id) => new Types.ObjectId(id)) },
+  })
+    .select('_id status provider')
+    .lean();
+
+  const seen = new Map(docs.map((d) => [String(d._id), d]));
+  for (const id of ids) {
+    const doc = seen.get(id);
+    if (!doc) {
+      return 'This workflow references an integration you no longer have connected.';
+    }
+    const broken: IntegrationStatus[] = ['expired', 'error', 'revoked'];
+    if (broken.includes(doc.status)) {
+      return `Your ${doc.provider} integration is ${doc.status}. Reconnect it from the Integrations page.`;
+    }
+  }
+  return null;
+}
+
+function collectIntegrationIds(definition: WorkflowDefinition): Set<string> {
+  const ids = new Set<string>();
+  const trigger = definition.trigger;
+  if (trigger.type === 'gmail.email_received') {
+    ids.add(trigger.config.integrationId);
+  }
+
+  function walkSteps(steps: WorkflowDefinition['steps']): void {
+    for (const step of steps) {
+      if (step.type === 'condition.if') {
+        walkSteps(step.config.then);
+        if (step.config.else) walkSteps(step.config.else);
+        continue;
+      }
+      const config = step.config as { integrationId?: string };
+      if (config.integrationId) ids.add(config.integrationId);
+    }
+  }
+  walkSteps(definition.steps);
+  return ids;
 }

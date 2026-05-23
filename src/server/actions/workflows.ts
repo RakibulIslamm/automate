@@ -86,13 +86,88 @@ export const createWorkflow = safeAction(
   },
 );
 
-/* ────────────────────────────── delete + status ────────────────────────────── */
+/* ────────────────────────────────── update ────────────────────────────────── */
 
 const idSchema = z.object({
   workflowId: z
     .string()
     .refine((v) => Types.ObjectId.isValid(v), 'Invalid workflowId'),
 });
+
+const updateSchema = idSchema.extend({
+  name: z.string().min(1).max(120),
+  description: z.string().max(500).optional(),
+  definition: workflowDefinitionSchema,
+});
+
+export interface UpdateWorkflowResult {
+  workflowId: string;
+}
+
+/**
+ * Save edits to an existing workflow. Re-validates the definition against
+ * the user's owned integrations (so a hand-edited definition can't sneak
+ * in a borrowed `integrationId`) and remaps `scheduleType`/`scheduleConfig`
+ * to keep the model row consistent with the new trigger.
+ */
+export const updateWorkflow = safeAction(
+  updateSchema,
+  async (input): Promise<UpdateWorkflowResult> => {
+    const user = await requireUser();
+    await connectDb();
+    const _id = new Types.ObjectId(input.workflowId);
+
+    const existing = await Workflow.findOne({ _id, userId: user._id }).select('_id');
+    if (!existing) throw new NotFoundError('Workflow not found.');
+
+    const integrationDocs = await Integration.find({ userId: user._id })
+      .select('_id')
+      .lean();
+    const validIntegrationIds = new Set(integrationDocs.map((d) => String(d._id)));
+
+    const semantic = validateWorkflow(input.definition, { validIntegrationIds });
+    if (!semantic.ok) {
+      throw new ValidationError('Workflow definition is invalid.', {
+        definition: semantic.errors.join('; '),
+      });
+    }
+
+    const scheduleType = mapTriggerToScheduleType(input.definition.trigger.type);
+    const scheduleConfig =
+      input.definition.trigger.type === 'schedule.cron'
+        ? input.definition.trigger.config
+        : null;
+
+    await Workflow.updateOne(
+      { _id },
+      {
+        $set: {
+          name: input.name,
+          description: input.description ?? null,
+          definition: semantic.data,
+          scheduleType,
+          scheduleConfig,
+        },
+      },
+    );
+
+    await trackEvent('workflow.updated', {
+      userId: String(user._id),
+      workflowId: _id,
+      properties: {
+        trigger: input.definition.trigger.type,
+        steps: input.definition.steps.length,
+      },
+    }).catch(() => {});
+
+    revalidatePath('/dashboard/workflows');
+    revalidatePath(`/dashboard/workflows/${input.workflowId}`);
+
+    return { workflowId: input.workflowId };
+  },
+);
+
+/* ────────────────────────────── delete + status ────────────────────────────── */
 
 export const deleteWorkflow = safeAction(idSchema, async ({ workflowId }) => {
   const user = await requireUser();
