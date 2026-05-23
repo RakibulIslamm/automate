@@ -69,6 +69,25 @@ function formatIssues(error: ZodError): string {
     .join('\n');
 }
 
+function pickKeys(source: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of keys) out[key] = source[key];
+  return out;
+}
+
+const serverKeys = Object.keys(serverSchema.shape) as readonly (keyof ServerEnv)[];
+
+function warnInvalidEnv(blocks: string[]): void {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '\n⚠️  Invalid environment variables — continuing anyway.\n' +
+      '   Features that depend on the listed vars will fail when used.\n' +
+      '   Fix .env.local to silence this warning.\n\n' +
+      blocks.join('\n') +
+      '\n',
+  );
+}
+
 function loadEnv(): Env {
   const isServer = typeof window === 'undefined';
 
@@ -76,11 +95,8 @@ function loadEnv(): Env {
 
   if (!isServer) {
     if (!clientResult.success) {
-      // eslint-disable-next-line no-console
-      console.error(
-        '\n❌ Invalid public environment variables:\n' + formatIssues(clientResult.error) + '\n',
-      );
-      throw new Error('Invalid public environment variables');
+      warnInvalidEnv(['Public vars:\n' + formatIssues(clientResult.error)]);
+      return clientRuntime as unknown as Env;
     }
     return clientResult.data as Env;
   }
@@ -89,18 +105,19 @@ function loadEnv(): Env {
 
   if (!serverResult.success || !clientResult.success) {
     const blocks: string[] = [];
-    if (!serverResult.success) {
-      blocks.push('Server vars:\n' + formatIssues(serverResult.error));
-    }
-    if (!clientResult.success) {
-      blocks.push('Public vars:\n' + formatIssues(clientResult.error));
-    }
-    // eslint-disable-next-line no-console
-    console.error('\n❌ Invalid environment variables:\n' + blocks.join('\n') + '\n');
-    throw new Error('Invalid environment variables — see logs above');
+    if (!serverResult.success) blocks.push('Server vars:\n' + formatIssues(serverResult.error));
+    if (!clientResult.success) blocks.push('Public vars:\n' + formatIssues(clientResult.error));
+    warnInvalidEnv(blocks);
   }
 
-  return { ...serverResult.data, ...clientResult.data };
+  const serverEnv = serverResult.success
+    ? serverResult.data
+    : (pickKeys(process.env as Record<string, unknown>, serverKeys) as ServerEnv);
+  const clientEnv = clientResult.success
+    ? clientResult.data
+    : (clientRuntime as unknown as ClientEnv);
+
+  return { ...serverEnv, ...clientEnv };
 }
 
 export const env: Env = loadEnv();
