@@ -14,6 +14,7 @@ import {
   RunStepCard,
   type RenderedStepResult,
 } from '@/components/runs/run-step-card';
+import { RunLiveUpdates } from '@/components/runs/run-live-updates';
 import { RunNowButton } from '@/components/workflows/run-now-button';
 import { requireUser } from '@/lib/auth/guards';
 import { connectDb } from '@/lib/db/connect';
@@ -48,6 +49,7 @@ export default async function RunDetailPage({ params }: Props) {
 
   return (
     <>
+      <RunLiveUpdates runId={String(run._id)} initialStatus={run.status} />
       <PageHeader
         title={workflow?.name ?? 'Run'}
         description={

@@ -46,10 +46,21 @@ export function RunNowButton({
       });
       const payload = (await res.json()) as
         | { data: { runId: string } }
-        | { error: { message: string } };
+        | { error: { code?: string; message: string } };
       if (!res.ok || 'error' in payload) {
-        const msg = 'error' in payload ? payload.error.message : 'Failed to start the run.';
-        toast.error(msg);
+        const err = 'error' in payload ? payload.error : { code: undefined, message: 'Failed to start the run.' };
+        // Quota exceeded → pop the upgrade modal alongside the toast.
+        if (err.code === 'QUOTA_EXCEEDED') {
+          toast.error(err.message, {
+            action: {
+              label: 'Upgrade',
+              onClick: () =>
+                window.dispatchEvent(new CustomEvent('automate:show-upgrade-modal')),
+            },
+          });
+        } else {
+          toast.error(err.message);
+        }
         return;
       }
       router.push(`/dashboard/runs/${payload.data.runId}`);

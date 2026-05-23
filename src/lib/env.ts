@@ -35,6 +35,13 @@ const serverSchema = z.object({
   // Stripe
   STRIPE_SECRET_KEY: z.string().min(1),
   STRIPE_WEBHOOK_SECRET: z.string().min(1),
+  // Per-plan price IDs — configure manually in Stripe dashboard, then paste here.
+  STRIPE_STARTER_PRICE_ID: z.string().min(1).optional(),
+  STRIPE_STARTER_OVERAGE_PRICE_ID: z.string().min(1).optional(),
+  STRIPE_PRO_PRICE_ID: z.string().min(1).optional(),
+  STRIPE_PRO_OVERAGE_PRICE_ID: z.string().min(1).optional(),
+  STRIPE_BUSINESS_PRICE_ID: z.string().min(1).optional(),
+  STRIPE_BUSINESS_OVERAGE_PRICE_ID: z.string().min(1).optional(),
 
   // Security
   ENCRYPTION_KEY: z

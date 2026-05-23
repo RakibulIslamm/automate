@@ -1,5 +1,7 @@
 import { requireUserOrRedirect } from '@/lib/auth/guards';
 import { DashboardShell } from '@/components/layout/dashboard-shell';
+import { UpgradeModal } from '@/components/billing/upgrade-modal';
+import type { Plan } from '@/lib/db/models';
 
 export default async function DashboardLayout({
   children,
@@ -17,6 +19,10 @@ export default async function DashboardLayout({
       }}
       isAdmin={!!user.isAdmin}
     >
+      {/* Global upgrade modal — listens for the `automate:show-upgrade-modal`
+          event from anywhere in the dashboard (run-now-button on quota toast,
+          etc). The billing page mounts its own copy too. */}
+      <UpgradeModal currentPlan={(user.plan as Plan) ?? 'free'} />
       {children}
     </DashboardShell>
   );

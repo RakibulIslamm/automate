@@ -3,6 +3,9 @@ import { Schema, model, models, type InferSchemaType, type Model, type Types } f
 export const PLANS = ['free', 'starter', 'pro', 'business'] as const;
 export type Plan = (typeof PLANS)[number];
 
+export const SUBSCRIPTION_STATUSES = ['active', 'past_due', 'canceled', 'unpaid', 'none'] as const;
+export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
+
 const usageSchema = new Schema(
   {
     runsThisPeriod: { type: Number, default: 0 },
@@ -29,6 +32,11 @@ const userSchema = new Schema(
     plan: { type: String, enum: PLANS, default: 'free' as Plan },
     stripeCustomerId: { type: String, index: { sparse: true } },
     stripeSubscriptionId: { type: String },
+    subscriptionStatus: {
+      type: String,
+      enum: SUBSCRIPTION_STATUSES,
+      default: 'none' as SubscriptionStatus,
+    },
     usage: { type: usageSchema, default: () => ({}) },
   },
   { timestamps: true },
