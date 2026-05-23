@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/toaster';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const geistSans = Geist({
   variable: '--font-sans',
@@ -49,8 +50,10 @@ export default function RootLayout({
     >
       <body suppressHydrationWarning className="min-h-full flex flex-col font-sans">
         <ThemeProvider>
-          <ErrorBoundary>{children}</ErrorBoundary>
-          <Toaster />
+          <TooltipProvider delayDuration={150}>
+            <ErrorBoundary>{children}</ErrorBoundary>
+            <Toaster />
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>

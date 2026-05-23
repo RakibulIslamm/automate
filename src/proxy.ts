@@ -7,8 +7,13 @@ import authConfig from '../auth.config';
  * Node-only runtime. The `authorized` callback in auth.config decides public
  * vs. protected for each path; when it returns false, Auth.js auto-redirects
  * to the configured sign-in page with `callbackUrl` preserved.
+ *
+ * Note: we export `proxy` explicitly (rather than destructuring as
+ * `{ auth: proxy } = NextAuth(...)`) because Turbopack's static analyzer
+ * doesn't always recognise the renamed destructure as a `proxy` export.
  */
-export const { auth: proxy } = NextAuth(authConfig);
+const { auth } = NextAuth(authConfig);
+export const proxy = auth;
 
 export const config = {
   matcher: [

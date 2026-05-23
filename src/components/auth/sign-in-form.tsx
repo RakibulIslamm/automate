@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { authErrorMessage } from '@/lib/auth/error-messages';
 
 const emailSchema = z.object({
   email: z.email('Enter a valid email address'),
@@ -50,8 +51,15 @@ export function SignInForm({ callbackUrl = '/dashboard', mode = 'sign-in' }: Sig
           callbackUrl,
           redirect: false,
         });
-        if (!result || result.error) {
-          throw new Error(result?.error ?? 'Could not send the magic link');
+        // signIn() returns { ok, error, status, url } with redirect:false.
+        // `error` is parsed from `?error=…` on the returned URL when Auth.js
+        // routes the response through its error page.
+        if (!result?.ok || result.error) {
+          const friendly = authErrorMessage(result?.error);
+          toast.error(friendly?.title ?? 'Could not send link', {
+            description: friendly?.description ?? 'Please try again or use Google.',
+          });
+          return;
         }
         setSentTo(values.email);
         toast.success('Check your email', {

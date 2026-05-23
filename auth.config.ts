@@ -1,3 +1,4 @@
+import { NextResponse } from 'next/server';
 import type { NextAuthConfig } from 'next-auth';
 import Google from 'next-auth/providers/google';
 
@@ -34,8 +35,14 @@ export default {
   ],
   pages: {
     signIn: '/sign-in',
-    verifyRequest: '/sign-in?status=check-email',
-    error: '/sign-in?status=error',
+    // Auth.js appends `?error=<code>` to this path. Don't put query strings in
+    // these values — Auth.js's URL builder is naive about existing `?`, which
+    // produces malformed `?status=x?error=y` URLs whose error param is then
+    // unreadable by the client-side signIn() helper.
+    error: '/sign-in',
+    // We intentionally don't override verifyRequest. With `redirect: false`
+    // from the client form, the form renders its own "check your email" UI
+    // anyway, so the verifyRequest page never shows.
   },
   session: { strategy: 'jwt' },
   callbacks: {

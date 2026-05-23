@@ -6,10 +6,11 @@ import { ErrorState } from '@/components/states/error-state';
 
 interface RouteErrorProps {
   error: Error & { digest?: string };
-  reset: () => void;
+  // Next 16: `reset` was renamed to `unstable_retry`.
+  unstable_retry: () => void;
 }
 
-export default function RouteError({ error, reset }: RouteErrorProps) {
+export default function RouteError({ error, unstable_retry }: RouteErrorProps) {
   useEffect(() => {
     void fetch('/api/internal/log-error', {
       method: 'POST',
@@ -34,7 +35,7 @@ export default function RouteError({ error, reset }: RouteErrorProps) {
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
-              onClick={reset}
+              onClick={unstable_retry}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Try again

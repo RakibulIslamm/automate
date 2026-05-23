@@ -35,6 +35,20 @@ pnpm dev
 
 Then open <http://localhost:3000>.
 
+## Make yourself an admin (local)
+
+The `/admin/*` routes are gated by `session.user.isAdmin`. To grant yourself admin
+access locally, sign in once so your user row exists, then flip the flag in MongoDB:
+
+```bash
+# Replace with your sign-in email
+mongosh "mongodb://localhost:27017/automate-dev" --quiet --eval \
+  'db.users.updateOne({email: "you@example.com"}, {$set: {isAdmin: true}})'
+```
+
+Or in MongoDB Atlas / Compass: open the `users` collection, find your document
+by `email`, set `isAdmin: true`. Sign out and sign back in to refresh the JWT.
+
 ## Architecture
 
 _Diagram coming in Phase 12._
