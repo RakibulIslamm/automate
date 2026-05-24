@@ -54,7 +54,7 @@ export function UserMenu({ user }: UserMenuProps) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <a href="/settings/account">
+          <a href="/dashboard/settings">
             <Settings className="mr-2 h-4 w-4" aria-hidden />
             Settings
           </a>

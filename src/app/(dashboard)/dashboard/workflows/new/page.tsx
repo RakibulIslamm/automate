@@ -8,8 +8,9 @@ export default function NewWorkflowPage() {
   return (
     <>
       <PageHeader
-        title="Create workflow"
-        description="Describe what you want to automate in plain English — AutoMate builds it for you."
+        eyebrow="New"
+        title="Describe your workflow"
+        description="In plain English — what should AutoMate do for you? The AI builds the structure; you review and run."
       />
       <WorkflowBuilder />
     </>

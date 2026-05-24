@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import { ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { GoogleIntegrationCard } from '@/components/integrations/google-integration-card';
 import { SlackIntegrationCard } from '@/components/integrations/slack-integration-card';
@@ -26,7 +27,6 @@ async function loadIntegrations(): Promise<Record<IntegrationProvider, ExistingI
   };
 
   for (const doc of docs) {
-    // First (most recent) doc wins per provider.
     if (byProvider[doc.provider] !== null) continue;
     byProvider[doc.provider] = {
       id: String(doc._id),
@@ -43,6 +43,8 @@ async function loadIntegrations(): Promise<Record<IntegrationProvider, ExistingI
 
 export default async function IntegrationsPage() {
   const integrations = await loadIntegrations();
+  const connectedCount = Object.values(integrations).filter(Boolean).length;
+  const totalProviders = Object.keys(integrations).length;
 
   return (
     <>
@@ -50,10 +52,27 @@ export default async function IntegrationsPage() {
         <OAuthResultToast />
       </Suspense>
       <PageHeader
+        eyebrow="Connections"
         title="Integrations"
-        description="Connect the accounts your workflows act on — Gmail, Drive, Slack, Notion, Calendar."
+        description="The tools your workflows act on. Connect each one with OAuth and AutoMate stores the tokens encrypted at rest."
+        action={
+          <div className="hidden items-center gap-2 rounded-full border border-border/60 bg-card px-3 py-1 text-xs text-muted-foreground sm:inline-flex">
+            <ShieldCheck className="size-3.5 text-emerald-600" aria-hidden />
+            AES-256-GCM at rest
+          </div>
+        }
       />
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+
+      <div className="mb-6 flex items-baseline gap-2 text-sm">
+        <span className="font-mono text-2xl tabular-nums text-foreground">
+          {connectedCount}
+        </span>
+        <span className="text-muted-foreground">
+          of {totalProviders} providers connected
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <GoogleIntegrationCard integration={integrations.google} />
         <SlackIntegrationCard integration={integrations.slack} />
         <NotionIntegrationCard integration={integrations.notion} />

@@ -70,8 +70,9 @@ export default async function BillingPage() {
     <>
       <UpgradeModal currentPlan={currentPlan} />
       <PageHeader
+        eyebrow="Account"
         title="Billing"
-        description="Manage your plan, see how much you’ve run, and grab invoices."
+        description="Manage your plan, see how much you've run, and grab invoices."
         action={hasSubscription ? <PortalButton /> : null}
       />
 
