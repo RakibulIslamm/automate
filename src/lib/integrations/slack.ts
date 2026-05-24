@@ -93,20 +93,87 @@ export async function postMessage(
   { channel, text, blocks }: PostMessageInput,
 ): Promise<{ ok: boolean; ts: string | undefined; channel: string | undefined }> {
   const client = await getSlackClient(integrationId);
-  // Slack's `MessageContents` is a discriminated union — either `text` or
-  // `blocks` is the primary. If blocks were supplied we send them and use
-  // `text` as a fallback string (shown in notifications + screen readers).
-  const args = blocks
-    ? ({
-        channel,
-        text,
-        blocks: blocks as Parameters<typeof client.chat.postMessage>[0] extends { blocks: infer B }
-          ? B
-          : never,
-      } as Parameters<typeof client.chat.postMessage>[0])
-    : ({ channel, text } as Parameters<typeof client.chat.postMessage>[0]);
-  const res = await wrap(client.chat.postMessage(args), 'chat.postMessage');
-  return { ok: res.ok === true, ts: res.ts, channel: res.channel };
+  const args = buildPostArgs({ channel, text, blocks }, client);
+
+  try {
+    const res = await wrap(client.chat.postMessage(args), 'chat.postMessage');
+    return { ok: res.ok === true, ts: res.ts, channel: res.channel };
+  } catch (err) {
+    // not_in_channel: the bot exists in the workspace but isn't a member
+    // of this channel. For public channels we can self-join and retry;
+    // private channels need a human to `/invite @AutoMate` first.
+    if (!isSlackErrorCode(err, 'not_in_channel')) throw err;
+
+    const joined = await tryJoinChannel(client, channel);
+    if (!joined.ok) {
+      const message =
+        joined.reason === 'private'
+          ? 'The AutoMate bot is not in this channel. In Slack, run /invite @AutoMate inside the channel and try again.'
+          : joined.reason === 'missing_scope'
+            ? 'The AutoMate Slack app needs the channels:join permission. Reconnect Slack from the Integrations page to grant it.'
+            : `Slack chat.postMessage failed: ${joined.reason}`;
+      throw new ExternalServiceError('Slack', message, err);
+    }
+
+    const retryRes = await wrap(client.chat.postMessage(args), 'chat.postMessage');
+    return { ok: retryRes.ok === true, ts: retryRes.ts, channel: retryRes.channel };
+  }
+}
+
+/** Slack's `MessageContents` is a discriminated union — either `text` or
+ * `blocks` is the primary. If blocks were supplied we send them and use
+ * `text` as a fallback string (shown in notifications + screen readers). */
+function buildPostArgs(
+  { channel, text, blocks }: PostMessageInput,
+  client: WebClient,
+): Parameters<typeof client.chat.postMessage>[0] {
+  if (blocks) {
+    return {
+      channel,
+      text,
+      blocks: blocks as Parameters<typeof client.chat.postMessage>[0] extends { blocks: infer B }
+        ? B
+        : never,
+    } as Parameters<typeof client.chat.postMessage>[0];
+  }
+  return { channel, text } as Parameters<typeof client.chat.postMessage>[0];
+}
+
+function isSlackErrorCode(err: unknown, code: string): boolean {
+  if (err instanceof ExternalServiceError) {
+    return err.message.includes(code);
+  }
+  return false;
+}
+
+/**
+ * Try to add the bot to a channel so it can post there. Returns `{ ok: true }`
+ * if it's now a member, otherwise `{ ok: false, reason }` with a stable
+ * reason the caller can surface.
+ *
+ * Slack's `conversations.join` only works for public channels — private
+ * channels return `method_not_supported_for_channel_type` and require an
+ * existing member to invite the bot.
+ */
+async function tryJoinChannel(
+  client: WebClient,
+  channel: string,
+): Promise<{ ok: true } | { ok: false; reason: 'private' | string }> {
+  try {
+    await client.conversations.join({ channel });
+    return { ok: true };
+  } catch (err) {
+    const slackErr = err as { data?: { error?: string }; message?: string };
+    const code = slackErr.data?.error ?? '';
+    if (
+      code === 'method_not_supported_for_channel_type' ||
+      code === 'channel_not_found' ||
+      code === 'is_archived'
+    ) {
+      return { ok: false, reason: 'private' };
+    }
+    return { ok: false, reason: code || slackErr.message || 'join failed' };
+  }
 }
 
 export interface SlackUser {

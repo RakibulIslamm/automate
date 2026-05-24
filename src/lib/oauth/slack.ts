@@ -18,6 +18,7 @@ const REVOKE_ENDPOINT = 'https://slack.com/api/auth.revoke';
 export const SLACK_BOT_SCOPES = [
   'chat:write',
   'channels:read',
+  'channels:join',
   'groups:read',
   'users:read',
 ] as const;
