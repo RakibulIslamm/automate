@@ -39,8 +39,8 @@ export const AI_MODELS: Record<ByokAiProvider, ModelOption[]> = {
     { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner', inputPer1M: 0.55, outputPer1M: 2.19 },
   ],
   openrouter: [
-    { id: 'openrouter/auto', label: 'Auto (route to best)', inputPer1M: 0, outputPer1M: 0 },
-    { id: 'deepseek/deepseek-chat', label: 'DeepSeek Chat', inputPer1M: 0.14, outputPer1M: 0.28 },
+    { id: 'deepseek/deepseek-v3.2', label: 'DeepSeek 3.2', inputPer1M: 0.252, outputPer1M: 0.378 },
+    { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash', inputPer1M: 0.10, outputPer1M: 0.20 },
     { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', inputPer1M: 0.13, outputPer1M: 0.4 },
     { id: 'mistralai/mistral-small-3.1-24b-instruct', label: 'Mistral Small 3.1', inputPer1M: 0.1, outputPer1M: 0.3 },
     { id: 'qwen/qwen-2.5-72b-instruct', label: 'Qwen 2.5 72B', inputPer1M: 0.23, outputPer1M: 0.4 },
