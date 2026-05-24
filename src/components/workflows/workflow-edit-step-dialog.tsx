@@ -72,8 +72,10 @@ export function WorkflowEditStepDialog({ step, open, onOpenChange, onSave }: Pro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent
+        className="flex max-h-[min(90svh,720px)] w-[calc(100vw-2rem)] flex-col gap-0 p-0 sm:max-w-xl"
+      >
+        <DialogHeader className="border-b border-border/60 px-6 py-4">
           <DialogTitle>Edit {meta.label}</DialogTitle>
           <DialogDescription>
             Tweak this step's configuration. References like{' '}
@@ -82,7 +84,7 @@ export function WorkflowEditStepDialog({ step, open, onOpenChange, onSave }: Pro
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="flex-1 space-y-3 overflow-y-auto px-6 py-5">
           <Field label="Step id">
             <Input
               value={draft.id}
@@ -91,15 +93,15 @@ export function WorkflowEditStepDialog({ step, open, onOpenChange, onSave }: Pro
           </Field>
 
           {renderFields(draft, updateConfig)}
+
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
         </div>
 
-        {error ? (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        <DialogFooter>
+        <DialogFooter className="border-t border-border/60 px-6 py-3">
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
@@ -260,6 +262,7 @@ function renderFields(
                   // Swallow — user is mid-edit. Save will surface schema errors.
                 }
               }}
+              className="max-h-[40svh] resize-y overflow-auto font-mono text-xs leading-relaxed field-sizing-fixed"
             />
           </Field>
         </>
