@@ -146,18 +146,27 @@ export const updateWorkflow = safeAction(
         ? input.definition.trigger.config
         : null;
 
-    // Diff the schedule. If the trigger or cron changed, drop the old
-    // QStash schedule and re-create one (only when the workflow is active).
-    const prevCron =
-      (existing.scheduleConfig as { cron?: string } | undefined)?.cron ?? null;
+    // Diff the schedule. If the trigger, cron, OR timezone changed, drop
+    // the old QStash schedule and re-create one (only when the workflow
+    // is active). Missing the timezone diff was the bug — QStash kept
+    // running the old UTC schedule.
+    const prevConfig = existing.scheduleConfig as
+      | { cron?: string; timezone?: string }
+      | undefined;
+    const prevCron = prevConfig?.cron ?? null;
+    const prevTz = prevConfig?.timezone ?? null;
     const nextCron =
       input.definition.trigger.type === 'schedule.cron'
         ? input.definition.trigger.config.cron
         : null;
-    const cronChanged = prevCron !== nextCron;
+    const nextTz =
+      input.definition.trigger.type === 'schedule.cron'
+        ? input.definition.trigger.config.timezone
+        : null;
+    const scheduleChanged = prevCron !== nextCron || prevTz !== nextTz;
 
     let newScheduleId: string | null = (existing.qstashScheduleId as string | null) ?? null;
-    if (cronChanged) {
+    if (scheduleChanged) {
       if (existing.qstashScheduleId) {
         await unscheduleWorkflow(existing.qstashScheduleId);
         newScheduleId = null;
@@ -238,9 +247,13 @@ export const setWorkflowStatus = safeAction(setStatusSchema, async ({ workflowId
     !!(existing.scheduleConfig as { cron?: string } | undefined)?.cron;
 
   if (status === 'active' && isCron && !existing.qstashScheduleId) {
-    const cron = (existing.scheduleConfig as { cron: string }).cron;
+    const cfg = existing.scheduleConfig as { cron: string; timezone?: string };
     try {
-      const res = await scheduleWorkflow({ workflowId, cron });
+      const res = await scheduleWorkflow({
+        workflowId,
+        cron: cfg.cron,
+        timezone: cfg.timezone,
+      });
       newScheduleId = res.scheduleId;
     } catch (err) {
       await logError(err, { source: 'setWorkflowStatus.schedule' });
@@ -298,6 +311,7 @@ async function trySchedule(
     const res = await scheduleWorkflow({
       workflowId,
       cron: definition.trigger.config.cron,
+      timezone: definition.trigger.config.timezone,
     });
     return res.scheduleId;
   } catch (err) {

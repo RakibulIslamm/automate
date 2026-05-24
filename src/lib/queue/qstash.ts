@@ -63,17 +63,32 @@ export async function enqueueWorkflowRun(
 export interface ScheduleWorkflowInput {
   workflowId: string;
   cron: string;
+  /**
+   * IANA timezone name (e.g. `America/New_York`). When omitted, QStash
+   * interprets the cron in UTC, which is rarely what the user means.
+   */
+  timezone?: string;
 }
 
 export async function scheduleWorkflow(
   input: ScheduleWorkflowInput,
 ): Promise<{ scheduleId: string }> {
   try {
+    // QStash reads cron timezone from the `Upstash-Cron-Tz` request header.
+    // The SDK's CreateScheduleRequest type doesn't expose it, but the SDK
+    // preserves any `Upstash-*` headers in `headers` as-is (its internal
+    // `isIgnoredHeader` skips the `Upstash-Forward-` prefixing for them),
+    // so we can inject it here without bypassing the SDK.
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (input.timezone && isValidTimezone(input.timezone)) {
+      headers['Upstash-Cron-Tz'] = input.timezone;
+    }
+
     const req: CreateScheduleRequest = {
       destination: absoluteUrl('/api/qstash/workflow-execute'),
       cron: input.cron,
       body: JSON.stringify({ workflowId: input.workflowId, scheduled: true }),
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       retries: 0,
     };
     const res = await client().schedules.create(req);
@@ -84,6 +99,20 @@ export async function scheduleWorkflow(
       'Could not register the schedule. Try again in a moment.',
       err,
     );
+  }
+}
+
+/**
+ * Reject obviously-bad strings before they hit QStash. Legacy values like
+ * `"BST"` (saved before we shipped the IANA picker) would otherwise cause
+ * QStash to reject the schedule entirely; better to fall back to UTC.
+ */
+function isValidTimezone(tz: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return true;
+  } catch {
+    return false;
   }
 }
 
