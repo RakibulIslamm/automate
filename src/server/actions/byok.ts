@@ -75,6 +75,7 @@ export const saveByokAiKey = safeAction(saveAiSchema, async ({ provider, apiKey,
     properties: { provider, model: model ?? null },
   }).catch(() => {});
 
+  revalidatePath('/dashboard/byok');
   revalidatePath('/dashboard/settings');
   return { ok: true as const, provider, status: 'active' as ByokStatus };
 });
@@ -101,6 +102,7 @@ export const removeByokKey = safeAction(providerSchema, async ({ provider }) => 
   const user = await requireUser();
   await connectDb();
   await ByokKey.deleteOne({ userId: user._id, provider });
+  revalidatePath('/dashboard/byok');
   revalidatePath('/dashboard/settings');
   return { ok: true as const };
 });

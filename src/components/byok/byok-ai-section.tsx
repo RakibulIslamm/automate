@@ -31,8 +31,21 @@ const PROVIDERS: Array<{ id: ByokAiProvider; label: string; help: string; placeh
   { id: 'deepseek', label: 'DeepSeek', help: 'platform.deepseek.com', placeholder: 'sk-…' },
 ];
 
+function pickDefaultTab(keys: Partial<Record<ByokAiProvider, ByokAiKeyView>>): ByokAiProvider {
+  const saved = PROVIDERS.map((p) => keys[p.id]).filter(
+    (k): k is ByokAiKeyView => k != null,
+  );
+  if (saved.length === 0) return 'anthropic';
+  const mostRecent = saved.reduce((best, cur) => {
+    const bestAt = best.lastTestedAt ? Date.parse(best.lastTestedAt) : 0;
+    const curAt = cur.lastTestedAt ? Date.parse(cur.lastTestedAt) : 0;
+    return curAt > bestAt ? cur : best;
+  });
+  return mostRecent.provider;
+}
+
 export function ByokAiSection({ keys }: Props) {
-  const [activeTab, setActiveTab] = useState<ByokAiProvider>('anthropic');
+  const [activeTab, setActiveTab] = useState<ByokAiProvider>(() => pickDefaultTab(keys));
   const current = PROVIDERS.find((p) => p.id === activeTab)!;
   const saved = keys[activeTab];
 
