@@ -1,4 +1,5 @@
 import { buildMetadata } from '@/lib/seo/metadata';
+import { getSession } from '@/lib/auth/session';
 import { Hero } from '@/components/marketing/hero';
 import { DemoBlock } from '@/components/marketing/demo-block';
 import { WhySection } from '@/components/marketing/why-section';
@@ -14,17 +15,20 @@ export const metadata = buildMetadata({
   path: '/',
 });
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await getSession();
+  const isSignedIn = !!session?.user;
+
   return (
     <>
-      <Hero />
-      <DemoBlock />
+      <Hero isSignedIn={isSignedIn} />
+      <DemoBlock isSignedIn={isSignedIn} />
       <WhySection />
       <HowSection />
       <UseCasesSection />
-      <PricingTeaser />
+      <PricingTeaser isSignedIn={isSignedIn} />
       <FaqSection />
-      <FinalCta />
+      <FinalCta isSignedIn={isSignedIn} />
     </>
   );
 }

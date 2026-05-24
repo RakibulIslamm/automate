@@ -9,11 +9,15 @@ const HeroTypewriter = dynamic(
   () => import('./hero-typewriter').then((m) => m.HeroTypewriter),
   {
     ssr: true,
-    loading: () => <div className="h-[280px] rounded-2xl border border-border/60 bg-card" />,
+    loading: () => <div className="h-70 rounded-2xl border border-border/60 bg-card" />,
   },
 );
 
-export function Hero() {
+interface HeroProps {
+  isSignedIn?: boolean;
+}
+
+export function Hero({ isSignedIn = false }: HeroProps) {
   return (
     <section className="relative overflow-hidden">
       <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 sm:pt-24 sm:pb-28">
@@ -32,7 +36,9 @@ export function Hero() {
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg">
-              <Link href="/sign-up">Start free</Link>
+              <Link href={isSignedIn ? '/dashboard/workflows/new' : '/sign-up'}>
+                {isSignedIn ? 'Build a workflow' : 'Start free'}
+              </Link>
             </Button>
             <Button asChild variant="ghost" size="lg">
               <Link href="#demo">

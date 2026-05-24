@@ -3,6 +3,7 @@ import { Check, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { buildMetadata } from '@/lib/seo/metadata';
+import { getSession } from '@/lib/auth/session';
 import { PLAN_CONFIG } from '@/lib/stripe/plans';
 import type { Plan } from '@/lib/db/models';
 import { cn } from '@/lib/utils';
@@ -65,7 +66,16 @@ const FEATURE_MATRIX: Array<{ label: string; values: Record<Plan, string | boole
   },
 ];
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const session = await getSession();
+  const isSignedIn = !!session?.user;
+  const planCtaHref = (key: Plan) =>
+    isSignedIn ? (key === 'free' ? '/dashboard' : '/dashboard/billing') : '/sign-up';
+  const planCtaLabel = (key: Plan, name: string) => {
+    if (key === 'free') return isSignedIn ? 'Open dashboard' : 'Start free';
+    return isSignedIn ? `Upgrade to ${name}` : `Choose ${name}`;
+  };
+
   return (
     <>
       <section className="border-b border-border/60">
@@ -118,9 +128,7 @@ export default function PricingPage() {
                   </ul>
                   <div className="mt-6">
                     <Button asChild className="w-full" variant={highlighted ? 'default' : 'outline'}>
-                      <Link href="/sign-up">
-                        {key === 'free' ? 'Start free' : `Choose ${plan.name}`}
-                      </Link>
+                      <Link href={planCtaHref(key)}>{planCtaLabel(key, plan.name)}</Link>
                     </Button>
                   </div>
                 </div>
@@ -203,14 +211,18 @@ export default function PricingPage() {
       <section className="border-t border-border/60 py-20">
         <div className="mx-auto max-w-2xl px-4 text-center sm:px-6">
           <h2 className="font-serif text-3xl tracking-tight sm:text-4xl">
-            Try it free
+            {isSignedIn ? 'Ready when you are' : 'Try it free'}
           </h2>
           <p className="mx-auto mt-3 max-w-md text-muted-foreground">
-            50 runs, every integration, the AI builder. No card required to start.
+            {isSignedIn
+              ? 'Manage your plan from the dashboard. Switch or cancel any time.'
+              : '50 runs, every integration, the AI builder. No card required to start.'}
           </p>
           <div className="mt-6">
             <Button asChild size="lg">
-              <Link href="/sign-up">Create your account</Link>
+              <Link href={isSignedIn ? '/dashboard/billing' : '/sign-up'}>
+                {isSignedIn ? 'Manage plan' : 'Create your account'}
+              </Link>
             </Button>
           </div>
         </div>

@@ -8,12 +8,22 @@ import type { Plan } from '@/lib/db/models';
 const ORDER: Plan[] = ['free', 'starter', 'pro', 'business'];
 const HIGHLIGHT: Plan = 'starter';
 
+interface PricingTeaserProps {
+  isSignedIn?: boolean;
+}
+
 /**
  * Pricing teaser mirrors the dashboard/billing page cards but with
  * cleaner marketing copy and a strong CTA. The highlighted "Starter"
  * plan signals the recommended path without forcing a decision.
+ *
+ * For signed-in visitors the CTAs deep-link into the billing page where
+ * actual upgrade flows live, instead of sending them through sign-up
+ * again.
  */
-export function PricingTeaser() {
+export function PricingTeaser({ isSignedIn = false }: PricingTeaserProps) {
+  const ctaHref = isSignedIn ? '/dashboard/billing' : '/sign-up';
+  const freeCtaHref = isSignedIn ? '/dashboard' : '/sign-up';
   return (
     <section id="pricing" className="border-y border-border/60 bg-muted/30 py-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -57,8 +67,8 @@ export function PricingTeaser() {
                 </ul>
                 <div className="mt-6">
                   <Button asChild className="w-full" variant={highlighted ? 'default' : 'outline'}>
-                    <Link href="/sign-up">
-                      {key === 'free' ? 'Start free' : `Choose ${plan.name}`}
+                    <Link href={key === 'free' ? freeCtaHref : ctaHref}>
+                      {ctaLabel(key, plan.name, isSignedIn)}
                     </Link>
                   </Button>
                 </div>
@@ -78,4 +88,9 @@ export function PricingTeaser() {
       </div>
     </section>
   );
+}
+
+function ctaLabel(key: Plan, name: string, isSignedIn: boolean): string {
+  if (key === 'free') return isSignedIn ? 'Open dashboard' : 'Start free';
+  return isSignedIn ? `Upgrade to ${name}` : `Choose ${name}`;
 }

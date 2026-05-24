@@ -62,7 +62,11 @@ const EXAMPLES: Example[] = [
   },
 ];
 
-export function DemoBlock() {
+interface DemoBlockProps {
+  isSignedIn?: boolean;
+}
+
+export function DemoBlock({ isSignedIn = false }: DemoBlockProps) {
   const [activeId, setActiveId] = useState(EXAMPLES[0]!.id);
   const active = EXAMPLES.find((e) => e.id === activeId) ?? EXAMPLES[0]!;
 
@@ -155,8 +159,8 @@ export function DemoBlock() {
 
         <div className="mt-8 flex justify-center">
           <Button asChild size="lg">
-            <Link href="/sign-up">
-              Try AutoMate yourself
+            <Link href={isSignedIn ? '/dashboard/workflows/new' : '/sign-up'}>
+              {isSignedIn ? 'Build your own' : 'Try AutoMate yourself'}
               <ArrowRight className="size-4" aria-hidden />
             </Link>
           </Button>
