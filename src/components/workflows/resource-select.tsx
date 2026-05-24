@@ -9,6 +9,9 @@ export interface ResourceOption {
   id: string;
   label: string;
   sublabel?: string;
+  /** Inline warning shown under the picker when this option is selected.
+   * Used by the Slack picker for private channels the bot isn't in yet. */
+  warning?: string;
 }
 
 interface Props {
@@ -28,7 +31,17 @@ interface Props {
 }
 
 interface ApiResponse {
-  data?: Record<string, Array<{ id: string; title?: string; name?: string; is_private?: boolean }>>;
+  data?: Record<
+    string,
+    Array<{
+      id: string;
+      title?: string;
+      name?: string;
+      is_private?: boolean;
+      is_member?: boolean;
+      warning?: string;
+    }>
+  >;
   error?: { message?: string };
 }
 
@@ -71,11 +84,20 @@ export function ResourceSelect({
           return;
         }
         const raw = body.data?.[listKey] ?? [];
-        const mapped: ResourceOption[] = raw.map((entry) => ({
-          id: entry.id,
-          label: entry.title ?? entry.name ?? entry.id,
-          sublabel: entry.is_private ? 'private' : undefined,
-        }));
+        const mapped: ResourceOption[] = raw.map((entry) => {
+          const needsInvite = entry.is_private === true && entry.is_member === false;
+          // Build a sublabel that hints at the state right in the option
+          // text so the user can scan the dropdown without selecting.
+          const parts: string[] = [];
+          if (entry.is_private) parts.push('private');
+          if (needsInvite) parts.push('needs invite');
+          return {
+            id: entry.id,
+            label: entry.title ?? entry.name ?? entry.id,
+            sublabel: parts.length > 0 ? parts.join(' · ') : undefined,
+            warning: entry.warning,
+          };
+        });
         setOptions(mapped);
         // If the current value isn't in the fetched list and looks like
         // a real id (not empty / not a template), surface as custom by
@@ -144,6 +166,7 @@ export function ResourceSelect({
   }
 
   const hasOptions = (options?.length ?? 0) > 0;
+  const selectedWarning = options?.find((o) => o.id === value)?.warning ?? null;
 
   return (
     <div className="space-y-1">
@@ -181,6 +204,12 @@ export function ResourceSelect({
           Nothing here yet — share a resource with the AutoMate integration in the connected app,
           or use “{customLabel}”.
         </p>
+      ) : null}
+      {selectedWarning ? (
+        <div className="flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-50/40 px-2.5 py-1.5 text-xs text-amber-700 dark:bg-amber-950/20 dark:text-amber-400">
+          <AlertCircle className="mt-0.5 size-3 shrink-0" aria-hidden />
+          <span>{selectedWarning}</span>
+        </div>
       ) : null}
     </div>
   );

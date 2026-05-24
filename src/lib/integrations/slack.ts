@@ -54,6 +54,12 @@ export interface SlackChannel {
   name: string;
   is_private: boolean;
   is_archived: boolean;
+  /** True when the bot is already a member of this channel. Slack's
+   * `conversations.list` returns `is_member` only for channels the bot
+   * can see; private channels the bot was never invited to don't show
+   * up in the list at all. So if you see a private channel here, the
+   * bot is in it; if you don't, it needs `/invite`. */
+  is_member: boolean;
 }
 
 export async function listChannels(integrationId: string): Promise<SlackChannel[]> {
@@ -71,6 +77,7 @@ export async function listChannels(integrationId: string): Promise<SlackChannel[
     name?: string;
     is_private?: boolean;
     is_archived?: boolean;
+    is_member?: boolean;
   }>;
   return channels
     .filter((c): c is { id: string; name: string } & typeof c => !!c.id && !!c.name)
@@ -79,6 +86,7 @@ export async function listChannels(integrationId: string): Promise<SlackChannel[
       name: c.name,
       is_private: c.is_private ?? false,
       is_archived: c.is_archived ?? false,
+      is_member: c.is_member ?? false,
     }));
 }
 
@@ -106,9 +114,22 @@ export async function postMessage(
 
     const joined = await tryJoinChannel(client, channel);
     if (!joined.ok) {
+      // For the private-channel case, look up the bot's actual handle so
+      // the message tells users exactly what to type. Best-effort — falls
+      // back to a generic name if auth.test isn't reachable.
+      let inviteHandle = '@AutoMate';
+      if (joined.reason === 'private') {
+        try {
+          const info = await client.auth.test();
+          const userName = (info as { user?: string }).user;
+          if (userName) inviteHandle = `@${userName}`;
+        } catch {
+          // ignore — fall back to default
+        }
+      }
       const message =
         joined.reason === 'private'
-          ? 'The AutoMate bot is not in this channel. In Slack, run /invite @AutoMate inside the channel and try again.'
+          ? `The bot is not in this channel. In Slack, run /invite ${inviteHandle} inside the channel and try again.`
           : joined.reason === 'missing_scope'
             ? 'The AutoMate Slack app needs the channels:join permission. Reconnect Slack from the Integrations page to grant it.'
             : `Slack chat.postMessage failed: ${joined.reason}`;

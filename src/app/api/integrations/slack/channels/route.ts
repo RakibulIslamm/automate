@@ -3,7 +3,7 @@ import { Types } from 'mongoose';
 import { requireUser } from '@/lib/auth/guards';
 import { connectDb } from '@/lib/db/connect';
 import { Integration } from '@/lib/db/models';
-import { listChannels } from '@/lib/integrations/slack';
+import { listChannels, authTest } from '@/lib/integrations/slack';
 
 /**
  * GET /api/integrations/slack/channels?integrationId=<id>
@@ -39,14 +39,31 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const channels = await listChannels(integrationId);
+    const [channels, bot] = await Promise.all([
+      listChannels(integrationId),
+      authTest(integrationId).catch(() => null),
+    ]);
+
+    const botHandle = bot?.user ? `@${bot.user}` : '@AutoMate';
+
     return NextResponse.json({
       data: {
-        channels: channels.map((c) => ({
-          id: c.id,
-          name: c.name,
-          is_private: c.is_private,
-        })),
+        bot: bot ? { name: bot.user, team: bot.team } : null,
+        channels: channels.map((c) => {
+          // Public channels: post will auto-join if the bot has channels:join.
+          // Private channels missing membership: must be invited manually —
+          // Slack does not allow bots to self-join private channels.
+          const needsInvite = c.is_private && !c.is_member;
+          return {
+            id: c.id,
+            name: c.name,
+            is_private: c.is_private,
+            is_member: c.is_member,
+            warning: needsInvite
+              ? `The bot isn't in this channel. Run /invite ${botHandle} inside #${c.name} once, then it can post.`
+              : undefined,
+          };
+        }),
       },
     });
   } catch (err) {
