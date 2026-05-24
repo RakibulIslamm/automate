@@ -16,10 +16,14 @@ const TRUST_BADGES = [
 ];
 
 /**
- * Final-CTA hero band. Inverted color palette (foreground bg / background
- * text) to break the page rhythm and signal "this is the action". The
- * decorative grid + radial mask + animated prompt chip give it visual
- * weight without going gimmicky.
+ * Final-CTA hero band. Uses mode-stable colors (always-dark surface +
+ * always-light type) so it reads as a single "call to action" treatment
+ * regardless of the current theme — using `bg-foreground` would invert
+ * with the theme and look broken in dark mode.
+ *
+ * Decorative grid + radial mask + soft glow give it visual weight; the
+ * staggered Framer entrance is fired once when the section scrolls into
+ * view.
  */
 export function FinalCta({ isSignedIn = false }: FinalCtaProps) {
   const ctaHref = isSignedIn ? '/dashboard/workflows/new' : '/sign-up';
@@ -28,41 +32,26 @@ export function FinalCta({ isSignedIn = false }: FinalCtaProps) {
   const secondaryLabel = isSignedIn ? 'Open dashboard' : 'See pricing';
 
   return (
-    <section className="relative isolate overflow-hidden border-t border-border/60 bg-foreground text-background">
+    <section className="relative isolate overflow-hidden border-t border-border/60 bg-neutral-950 text-neutral-50">
       {/* Decorative grid — radial-masked so edges fade out cleanly */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.08]"
-        style={{
-          backgroundImage:
-            'linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-          color: 'rgb(var(--background-rgb, 250 249 246))',
-          maskImage:
-            'radial-gradient(circle at center, black 0%, black 35%, transparent 75%)',
-          WebkitMaskImage:
-            'radial-gradient(circle at center, black 0%, black 35%, transparent 75%)',
-        }}
+        className="pointer-events-none absolute inset-0 opacity-10 bg-[linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] bg-size-[48px_48px] mask-[radial-gradient(circle_at_center,black_0%,black_35%,transparent_75%)]"
       />
 
       {/* Soft glow */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(ellipse 60% 50% at 50% 40%, rgba(255,255,255,0.08), transparent)',
-        }}
+        className="pointer-events-none absolute inset-0 [background:radial-gradient(ellipse_60%_50%_at_50%_40%,rgba(255,255,255,0.08),transparent)]"
       />
 
       <div className="relative mx-auto max-w-3xl px-4 py-24 text-center sm:px-6 sm:py-28">
-        {/* Animated prompt-style chip — visual cue that this is The Pitch */}
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-100px' }}
           transition={{ duration: 0.5 }}
-          className="mx-auto inline-flex items-center gap-2 rounded-full border border-background/15 bg-background/5 px-3 py-1 text-xs text-background/70 backdrop-blur"
+          className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-neutral-300 backdrop-blur-sm"
         >
           <span className="inline-block size-1.5 rounded-full bg-emerald-400" aria-hidden />
           AI-built workflows · powered by Claude
@@ -77,7 +66,7 @@ export function FinalCta({ isSignedIn = false }: FinalCtaProps) {
         >
           Stop clicking.
           <br />
-          <span className="bg-linear-to-r from-background to-background/60 bg-clip-text text-transparent">
+          <span className="bg-linear-to-r from-neutral-50 to-neutral-50/60 bg-clip-text text-transparent">
             Start describing.
           </span>
         </motion.h2>
@@ -87,7 +76,7 @@ export function FinalCta({ isSignedIn = false }: FinalCtaProps) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-100px' }}
           transition={{ duration: 0.55, delay: 0.12 }}
-          className="mx-auto mt-5 max-w-xl text-base text-background/70 sm:text-lg"
+          className="mx-auto mt-5 max-w-xl text-base text-neutral-300 sm:text-lg"
         >
           {isSignedIn
             ? 'You\'re signed in. Drop into the builder and ship your next automation.'
@@ -101,13 +90,18 @@ export function FinalCta({ isSignedIn = false }: FinalCtaProps) {
           transition={{ duration: 0.55, delay: 0.18 }}
           className="mt-9 flex flex-wrap items-center justify-center gap-3"
         >
-          <Button asChild size="lg" variant="secondary" className="group">
+          <Button asChild size="lg" className="group bg-white text-neutral-950 hover:bg-neutral-200">
             <Link href={ctaHref}>
               {ctaLabel}
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </Link>
           </Button>
-          <Button asChild size="lg" variant="ghost" className="text-background hover:bg-background/10 hover:text-background">
+          <Button
+            asChild
+            size="lg"
+            variant="ghost"
+            className="text-neutral-50 hover:bg-white/10 hover:text-neutral-50"
+          >
             <Link href={secondaryHref}>{secondaryLabel}</Link>
           </Button>
         </motion.div>
@@ -118,11 +112,11 @@ export function FinalCta({ isSignedIn = false }: FinalCtaProps) {
             whileInView={{ opacity: 1 }}
             viewport={{ once: true, margin: '-100px' }}
             transition={{ duration: 0.7, delay: 0.3 }}
-            className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs text-background/60 sm:text-sm"
+            className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs text-neutral-400 sm:text-sm"
           >
             {TRUST_BADGES.map((b) => (
               <li key={b.label} className="inline-flex items-center gap-2">
-                <b.icon className="size-3.5 text-background/70" aria-hidden />
+                <b.icon className="size-3.5 text-neutral-300" aria-hidden />
                 {b.label}
               </li>
             ))}
