@@ -1,19 +1,11 @@
 'use client';
 
 import { useTransition, type ReactNode } from 'react';
-import { format } from 'date-fns';
-import { ExternalLink, Loader2, Plug, Sparkles } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { ExternalLink, Loader2, Plug } from 'lucide-react';
 import { toast } from 'sonner';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { DisconnectConfirmDialog } from './disconnect-confirm-dialog';
 import { testIntegration } from '@/server/actions/integrations';
 
@@ -22,12 +14,6 @@ interface ScopeBadge {
   label: string;
 }
 
-/**
- * Maps raw scope strings to friendly labels, then de-duplicates by label —
- * Google returns both `email` and `https://www.googleapis.com/auth/userinfo.email`
- * which would otherwise render as twin badges. Unknown scopes fall back to
- * the trailing path segment (or the raw string for non-URL scopes).
- */
 function dedupeScopeLabels(
   scopes: string[],
   labels: Record<string, string>,
@@ -50,14 +36,30 @@ function fallbackScopeLabel(scope: string): string {
   return scope;
 }
 
-const STATUS_VARIANTS: Record<
+const STATUS_META: Record<
   string,
-  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
+  { label: string; dot: string; text: string }
 > = {
-  active: { label: 'Active', variant: 'default' },
-  expired: { label: 'Expired — reconnect', variant: 'destructive' },
-  revoked: { label: 'Revoked', variant: 'destructive' },
-  error: { label: 'Error', variant: 'destructive' },
+  active: {
+    label: 'Connected',
+    dot: 'bg-emerald-500',
+    text: 'text-emerald-700 dark:text-emerald-400',
+  },
+  expired: {
+    label: 'Reconnect needed',
+    dot: 'bg-amber-500',
+    text: 'text-amber-700 dark:text-amber-400',
+  },
+  revoked: {
+    label: 'Revoked',
+    dot: 'bg-rose-500',
+    text: 'text-rose-700 dark:text-rose-400',
+  },
+  error: {
+    label: 'Error',
+    dot: 'bg-rose-500',
+    text: 'text-rose-700 dark:text-rose-400',
+  },
 };
 
 export interface ExistingIntegration {
@@ -71,27 +73,14 @@ export interface ExistingIntegration {
 
 export interface IntegrationCardProps {
   provider: 'google' | 'slack' | 'notion';
-  /** e.g. "Google Workspace" — shown as the card title. */
   title: string;
-  /** Used inside the disconnect/test toasts — e.g. "Google", "Slack". */
   shortLabel: string;
   description: string;
-  /** Icon node — branded SVG, sized to the slot. */
   icon: ReactNode;
-  /**
-   * Icon "chip" background — Google needs white, Slack/Notion look better on
-   * the muted palette. Caller picks via Tailwind utility classes.
-   */
   iconWrapperClassName?: string;
-  /** Bullet-point copy shown when not connected. */
   features: string[];
-  /** "Account" label in the connected-state details (e.g. "Workspace"). */
   accountLabel?: string;
   scopeLabels?: Record<string, string>;
-  /**
-   * Label shown for the scope/feature row in the connected state. Falsy
-   * skips the badges entirely (Notion has no granular scopes).
-   */
   scopeListLabel?: string | null;
   integration: ExistingIntegration | null;
 }
@@ -111,7 +100,7 @@ export function IntegrationCard({
 }: IntegrationCardProps) {
   const [pending, startTransition] = useTransition();
   const connected = integration !== null;
-  const statusInfo = integration ? STATUS_VARIANTS[integration.status] ?? STATUS_VARIANTS.error : null;
+  const statusInfo = integration ? STATUS_META[integration.status] ?? STATUS_META.error : null;
 
   function handleTest() {
     if (!integration) return;
@@ -132,100 +121,103 @@ export function IntegrationCard({
   }
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader>
-        <div className="flex items-start gap-4">
-          <div
-            className={`grid size-12 shrink-0 place-items-center rounded-xl shadow-sm ${iconWrapperClassName}`}
-          >
-            {icon}
-          </div>
-          <div className="min-w-0 flex-1">
-            <CardTitle className="flex items-center gap-2">
-              {title}
-              {connected && statusInfo ? (
-                <Badge
-                  variant={statusInfo.variant === 'default' ? 'secondary' : statusInfo.variant}
-                >
-                  {statusInfo.label}
-                </Badge>
-              ) : null}
-            </CardTitle>
-            <CardDescription className="mt-1">{description}</CardDescription>
-          </div>
+    <div
+      className={cn(
+        'group relative flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card transition-colors',
+        connected ? 'hover:border-border' : 'hover:border-foreground/30',
+      )}
+    >
+      {/* Top: icon + identity + status */}
+      <div className="flex items-start gap-4 p-6">
+        <div
+          className={cn(
+            'grid size-12 shrink-0 place-items-center rounded-xl shadow-sm',
+            iconWrapperClassName,
+          )}
+        >
+          {icon}
         </div>
-      </CardHeader>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-serif text-xl tracking-tight">{title}</h3>
+            {statusInfo ? (
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] font-medium',
+                  statusInfo.text,
+                )}
+              >
+                <span className={cn('size-1.5 rounded-full', statusInfo.dot)} />
+                {statusInfo.label}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</p>
+        </div>
+      </div>
 
-      <CardContent className="space-y-4">
+      {/* Body: details when connected, feature list when not */}
+      <div className="flex-1 px-6">
         {connected && integration ? (
-          <>
-            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {accountLabel}
-                </dt>
-                <dd className="mt-0.5 truncate font-medium">{integration.displayName}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Connected
-                </dt>
-                <dd className="mt-0.5">
-                  {integration.connectedAt
-                    ? format(new Date(integration.connectedAt), 'PP')
-                    : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Last used
-                </dt>
-                <dd className="mt-0.5">
-                  {integration.lastUsedAt
-                    ? format(new Date(integration.lastUsedAt), 'PP p')
-                    : 'Not yet'}
-                </dd>
-              </div>
+          <div className="space-y-5 border-t border-border/60 pt-5">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+              <Field label={accountLabel}>
+                <span className="truncate">{integration.displayName}</span>
+              </Field>
+              <Field label="Connected">
+                {integration.connectedAt
+                  ? formatDistanceToNow(new Date(integration.connectedAt), { addSuffix: true })
+                  : '—'}
+              </Field>
+              <Field label="Last used">
+                {integration.lastUsedAt
+                  ? formatDistanceToNow(new Date(integration.lastUsedAt), { addSuffix: true })
+                  : 'Not yet'}
+              </Field>
+              {scopeListLabel && integration.scopes.length > 0 ? (
+                <Field label={scopeListLabel}>
+                  <span className="tabular-nums">{dedupeScopeLabels(integration.scopes, scopeLabels).length} permissions</span>
+                </Field>
+              ) : null}
             </dl>
+
             {scopeListLabel && integration.scopes.length > 0 ? (
-              <div className="space-y-1.5">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {scopeListLabel}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {dedupeScopeLabels(integration.scopes, scopeLabels).map(
-                    ({ key, label }) => (
-                      <Badge key={key} variant="outline" className="font-normal">
-                        {label}
-                      </Badge>
-                    ),
-                  )}
-                </div>
+              <div className="flex flex-wrap gap-1.5">
+                {dedupeScopeLabels(integration.scopes, scopeLabels).map(({ key, label }) => (
+                  <span
+                    key={key}
+                    className="rounded-md border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground"
+                  >
+                    {label}
+                  </span>
+                ))}
               </div>
             ) : null}
-          </>
+          </div>
         ) : (
-          <ul className="grid grid-cols-1 gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+          <ul className="space-y-2 border-t border-border/60 pt-5 text-sm">
             {features.map((feature) => (
-              <li key={feature} className="flex items-center gap-2">
-                <Sparkles className="size-4" aria-hidden /> {feature}
+              <li key={feature} className="flex items-start gap-2.5 text-muted-foreground">
+                <span className="mt-1.5 inline-block size-1 shrink-0 rounded-full bg-foreground/30" />
+                <span>{feature}</span>
               </li>
             ))}
           </ul>
         )}
-      </CardContent>
+      </div>
 
-      <CardFooter className="flex flex-wrap items-center justify-end gap-2 border-t pt-6">
+      {/* Footer actions */}
+      <div className="mt-6 flex flex-wrap items-center justify-end gap-1 border-t border-border/60 bg-muted/20 px-3 py-2">
         {connected && integration ? (
           <>
-            <Button variant="outline" size="sm" onClick={handleTest} disabled={pending}>
+            <Button variant="ghost" size="sm" onClick={handleTest} disabled={pending}>
               {pending ? (
                 <>
                   <Loader2 className="size-3.5 animate-spin" />
-                  Testing…
+                  Testing
                 </>
               ) : (
-                'Test connection'
+                'Test'
               )}
             </Button>
             <DisconnectConfirmDialog
@@ -238,6 +230,7 @@ export function IntegrationCard({
                 </Button>
               }
             />
+            <div className="mx-1 h-4 w-px bg-border/70" aria-hidden />
             <Button size="sm" asChild>
               <a href={`/api/oauth/${provider}/connect`}>
                 Reconnect
@@ -246,14 +239,25 @@ export function IntegrationCard({
             </Button>
           </>
         ) : (
-          <Button asChild>
+          <Button size="sm" asChild>
             <a href={`/api/oauth/${provider}/connect`}>
-              <Plug className="size-4" />
+              <Plug className="size-3.5" />
               Connect {shortLabel}
             </a>
           </Button>
         )}
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10.5px] font-medium uppercase tracking-[0.15em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-1 truncate font-medium">{children}</dd>
+    </div>
   );
 }

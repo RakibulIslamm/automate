@@ -2,12 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Types } from 'mongoose';
-import { format } from 'date-fns';
-import { ArrowLeft } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { JsonBlock } from '@/components/runs/json-block';
 import { RunStatusBadge } from '@/components/runs/run-status-badge';
 import {
@@ -47,69 +45,80 @@ export default async function RunDetailPage({ params }: Props) {
     serializeStepResult,
   );
 
+  const triggerTimestamp = run.completedAt ?? run.startedAt ?? run.createdAt;
+
   return (
     <>
       <RunLiveUpdates runId={String(run._id)} initialStatus={run.status} />
+
+      <div className="mb-6">
+        <Button variant="ghost" size="sm" asChild className="-ml-2">
+          <Link href={`/dashboard/workflows/${String(run.workflowId)}`}>
+            <ArrowLeft className="size-3.5" />
+            Back to workflow
+          </Link>
+        </Button>
+      </div>
+
       <PageHeader
+        eyebrow={`Run · ${String(run._id).slice(-8)}`}
         title={workflow?.name ?? 'Run'}
         description={
-          run.completedAt
-            ? `Ran on ${format(new Date(run.completedAt), 'PP p')}`
-            : run.startedAt
-              ? `Started on ${format(new Date(run.startedAt), 'PP p')}`
-              : 'Queued'
+          triggerTimestamp
+            ? `${formatRelative(triggerTimestamp)} · ${format(new Date(triggerTimestamp), 'PPp')}`
+            : 'Queued'
         }
-        action={
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/dashboard/workflows/${String(run.workflowId)}`}>
-                <ArrowLeft className="size-3.5" />
-                Back to workflow
-              </Link>
-            </Button>
-            <RunStatusBadge status={run.status} />
-          </div>
-        }
+        action={<RunStatusBadge status={run.status} />}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* Stat strip */}
+      <div className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border/60 bg-border/60 sm:grid-cols-4">
         <Stat label="Status" value={capitalize(run.status)} />
         <Stat
           label="Duration"
           value={run.durationMs != null ? formatDuration(run.durationMs) : '—'}
+          mono
         />
         <Stat
           label="Cost"
           value={run.costUsd != null ? `$${run.costUsd.toFixed(4)}` : '—'}
+          mono
         />
-        <Stat label="Steps" value={String(stepResults.length)} />
+        <Stat label="Steps" value={String(stepResults.length)} mono />
       </div>
 
       {run.errorMessage ? (
-        <Card>
-          <CardContent className="space-y-1 p-4">
-            <p className="text-xs uppercase tracking-wide text-rose-600">Run error</p>
-            <p className="text-sm">{run.errorMessage}</p>
-          </CardContent>
-        </Card>
+        <div className="mb-6 overflow-hidden rounded-2xl border border-rose-500/30 bg-rose-50/40 dark:bg-rose-950/20">
+          <div className="border-b border-rose-500/30 bg-rose-500/10 px-5 py-2">
+            <p className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-rose-700 dark:text-rose-300">
+              Run error
+            </p>
+          </div>
+          <div className="px-5 py-4 font-mono text-[13px] text-rose-700 dark:text-rose-300">
+            {run.errorMessage}
+          </div>
+        </div>
       ) : null}
 
-      <Card>
-        <CardContent className="space-y-2 p-6">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Trigger data
-          </p>
-          <JsonBlock value={run.triggerData ?? {}} />
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* Steps — main column */}
+        <section>
+          <div className="mb-4 flex items-end justify-between">
+            <div>
+              <p className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Execution
+              </p>
+              <h2 className="font-serif text-2xl tracking-tight">Steps</h2>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {stepResults.length} step{stepResults.length === 1 ? '' : 's'}
+            </span>
+          </div>
 
-      <Card>
-        <CardContent className="space-y-4 p-6">
-          <h2 className="font-serif text-xl tracking-tight">Steps</h2>
           {stepResults.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-dashed border-border/70 bg-card/40 py-14 text-center text-sm text-muted-foreground">
               No steps executed.
-            </p>
+            </div>
           ) : (
             <div className="space-y-3">
               {stepResults.map((step, i) => (
@@ -117,17 +126,61 @@ export default async function RunDetailPage({ params }: Props) {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
 
-      <Separator />
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/20 px-5 py-4">
+            <div>
+              <p className="text-sm font-medium">Re-run with same trigger data</p>
+              <p className="text-xs text-muted-foreground">
+                Useful for debugging a failure without waiting for the trigger again.
+              </p>
+            </div>
+            <RunNowButton
+              workflowId={String(run.workflowId)}
+              label="Re-run"
+              triggerData={run.triggerData}
+            />
+          </div>
+        </section>
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <RunNowButton
-          workflowId={String(run.workflowId)}
-          label="Re-run with same data"
-          triggerData={run.triggerData}
-        />
+        {/* Right rail */}
+        <aside className="space-y-6 lg:sticky lg:top-32 lg:self-start">
+          <section className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+            <header className="border-b border-border/60 px-5 py-3">
+              <p className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Trigger data
+              </p>
+            </header>
+            <div className="p-3">
+              <JsonBlock value={run.triggerData ?? {}} />
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-border/60 bg-card p-5">
+            <p className="mb-3 text-[10.5px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Timeline
+            </p>
+            <ul className="space-y-2.5 text-sm">
+              <TimelineRow label="Queued" value={run.createdAt} />
+              <TimelineRow label="Started" value={run.startedAt} />
+              <TimelineRow label="Finished" value={run.completedAt} />
+            </ul>
+          </section>
+
+          <Link
+            href={`/dashboard/workflows/${String(run.workflowId)}`}
+            className="group flex items-center justify-between rounded-2xl border border-border/60 bg-card p-5 transition-colors hover:border-foreground/30"
+          >
+            <div>
+              <p className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Workflow
+              </p>
+              <p className="mt-1 font-serif text-lg tracking-tight">
+                {workflow?.name ?? '—'}
+              </p>
+            </div>
+            <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+          </Link>
+        </aside>
       </div>
     </>
   );
@@ -135,15 +188,39 @@ export default async function RunDetailPage({ params }: Props) {
 
 /* ───────────────────────────── helpers ───────────────────────────── */
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className="mt-1 text-lg font-medium tabular-nums">{value}</p>
-      </CardContent>
-    </Card>
+    <div className="bg-card px-5 py-4">
+      <p className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        {label}
+      </p>
+      <p className={`mt-1.5 text-xl font-medium ${mono ? 'font-mono tabular-nums' : ''}`}>
+        {value}
+      </p>
+    </div>
   );
+}
+
+function TimelineRow({ label, value }: { label: string; value: Date | string | null | undefined }) {
+  return (
+    <li className="flex items-baseline justify-between gap-3">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      {value ? (
+        <span className="text-right text-xs tabular-nums">
+          <span className="block font-medium text-foreground">
+            {format(new Date(value), 'p')}
+          </span>
+          <span className="text-muted-foreground">{format(new Date(value), 'PP')}</span>
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground">—</span>
+      )}
+    </li>
+  );
+}
+
+function formatRelative(value: Date | string): string {
+  return formatDistanceToNow(new Date(value), { addSuffix: true });
 }
 
 function capitalize(s: string): string {
@@ -158,10 +235,6 @@ function formatDuration(ms: number): string {
   return `${m}m ${s}s`;
 }
 
-/**
- * Mongoose lean returns Dates; the client component prop type expects
- * ISO strings (so it stays serialisable across the RSC boundary).
- */
 function serializeStepResult(raw: unknown): RenderedStepResult {
   const r = raw as Partial<RenderedStepResult> & {
     startedAt?: Date | string | null;

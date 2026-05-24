@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Types } from 'mongoose';
-import { History, ArrowRight } from 'lucide-react';
+import { History, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { RunStatusBadge } from '@/components/runs/run-status-badge';
 import { requireUser } from '@/lib/auth/guards';
@@ -19,11 +19,14 @@ export const metadata: Metadata = { title: 'Runs' };
 
 interface SearchParams {
   filter?: string;
+  page?: string;
 }
 
 interface Props {
   searchParams: Promise<SearchParams>;
 }
+
+const PAGE_SIZE = 25;
 
 const FILTERS = [
   { key: 'all', label: 'All', statuses: null as readonly WorkflowRunStatus[] | null },
@@ -43,8 +46,9 @@ interface Row {
 }
 
 export default async function RunsPage({ searchParams }: Props) {
-  const { filter } = await searchParams;
+  const { filter, page: pageParam } = await searchParams;
   const active = FILTERS.find((f) => f.key === filter) ?? FILTERS[0]!;
+  const page = parsePage(pageParam);
 
   const user = await requireUser();
   await connectDb();
@@ -52,9 +56,15 @@ export default async function RunsPage({ searchParams }: Props) {
   const query: Record<string, unknown> = { userId: user._id };
   if (active.statuses) query.status = { $in: active.statuses };
 
-  // Get filter counts in parallel for the tab labels.
-  const [docs, countsRaw] = await Promise.all([
-    WorkflowRun.find(query).sort({ createdAt: -1 }).limit(100).lean(),
+  const skip = (page - 1) * PAGE_SIZE;
+
+  const [docs, totalMatching, countsRaw] = await Promise.all([
+    WorkflowRun.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(PAGE_SIZE)
+      .lean(),
+    WorkflowRun.countDocuments(query),
     WorkflowRun.aggregate<{ _id: WorkflowRunStatus; n: number }>([
       { $match: { userId: user._id } },
       { $group: { _id: '$status', n: { $sum: 1 } } },
@@ -68,6 +78,9 @@ export default async function RunsPage({ searchParams }: Props) {
     failure: (counts.get('failure') ?? 0) + (counts.get('partial') ?? 0),
     running: (counts.get('running') ?? 0) + (counts.get('queued') ?? 0),
   };
+
+  const totalPages = Math.max(1, Math.ceil(totalMatching / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
 
   const workflowIds = Array.from(
     new Set(docs.map((d) => String(d.workflowId))),
@@ -89,6 +102,9 @@ export default async function RunsPage({ searchParams }: Props) {
     costUsd: typeof d.costUsd === 'number' ? d.costUsd : null,
   }));
 
+  const rangeStart = totalMatching === 0 ? 0 : skip + 1;
+  const rangeEnd = Math.min(skip + rows.length, totalMatching);
+
   return (
     <>
       <PageHeader
@@ -97,14 +113,14 @@ export default async function RunsPage({ searchParams }: Props) {
         description="Every workflow execution, with step output, timing, and the cost it incurred."
       />
 
-      {/* Filter rail — compact pill row instead of standard tabs */}
+      {/* Filter rail */}
       <div className="mb-6 flex flex-wrap items-center gap-1.5">
         {FILTERS.map((f) => {
           const isActive = f.key === active.key;
           return (
             <Link
               key={f.key}
-              href={f.key === 'all' ? '/dashboard/runs' : `/dashboard/runs?filter=${f.key}`}
+              href={hrefFor(f.key, 1)}
               className={cn(
                 'group inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm transition-colors',
                 isActive
@@ -131,10 +147,34 @@ export default async function RunsPage({ searchParams }: Props) {
       {rows.length === 0 ? (
         <EmptyRuns label={active.label.toLowerCase()} isAll={active.key === 'all'} />
       ) : (
-        <RunsTable rows={rows} />
+        <>
+          <RunsTable rows={rows} />
+          <Pagination
+            page={safePage}
+            totalPages={totalPages}
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+            total={totalMatching}
+            filter={active.key}
+          />
+        </>
       )}
     </>
   );
+}
+
+function parsePage(raw?: string): number {
+  const n = Number.parseInt(raw ?? '1', 10);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return n;
+}
+
+function hrefFor(filter: string, page: number): string {
+  const params = new URLSearchParams();
+  if (filter !== 'all') params.set('filter', filter);
+  if (page > 1) params.set('page', String(page));
+  const qs = params.toString();
+  return qs ? `/dashboard/runs?${qs}` : '/dashboard/runs';
 }
 
 function EmptyRuns({ label, isAll }: { label: string; isAll: boolean }) {
@@ -156,7 +196,6 @@ function EmptyRuns({ label, isAll }: { label: string; isAll: boolean }) {
 }
 
 function RunsTable({ rows }: { rows: Row[] }) {
-  // Group rows by date for a calmer, more editorial scan pattern.
   const groups = groupByDay(rows);
   return (
     <div className="space-y-8">
@@ -200,6 +239,154 @@ function RunsTable({ rows }: { rows: Row[] }) {
       ))}
     </div>
   );
+}
+
+function Pagination({
+  page,
+  totalPages,
+  rangeStart,
+  rangeEnd,
+  total,
+  filter,
+}: {
+  page: number;
+  totalPages: number;
+  rangeStart: number;
+  rangeEnd: number;
+  total: number;
+  filter: string;
+}) {
+  if (totalPages <= 1) {
+    return (
+      <p className="mt-8 text-center text-xs text-muted-foreground">
+        Showing {total} of {total}
+      </p>
+    );
+  }
+
+  const hasPrev = page > 1;
+  const hasNext = page < totalPages;
+
+  return (
+    <nav
+      aria-label="Run history pagination"
+      className="mt-8 flex flex-col gap-3 border-t border-border/40 pt-5 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p className="text-xs text-muted-foreground">
+        Showing <span className="font-mono tabular-nums text-foreground">{rangeStart}</span>–
+        <span className="font-mono tabular-nums text-foreground">{rangeEnd}</span> of{' '}
+        <span className="font-mono tabular-nums text-foreground">{total}</span>
+      </p>
+      <div className="flex items-center gap-1.5">
+        <PaginationLink
+          href={hrefFor(filter, page - 1)}
+          disabled={!hasPrev}
+          aria-label="Previous page"
+        >
+          <ChevronLeft className="size-3.5" />
+          <span className="hidden sm:inline">Previous</span>
+        </PaginationLink>
+        <PageNumbers page={page} totalPages={totalPages} filter={filter} />
+        <PaginationLink
+          href={hrefFor(filter, page + 1)}
+          disabled={!hasNext}
+          aria-label="Next page"
+        >
+          <span className="hidden sm:inline">Next</span>
+          <ChevronRight className="size-3.5" />
+        </PaginationLink>
+      </div>
+    </nav>
+  );
+}
+
+function PaginationLink({
+  href,
+  disabled,
+  children,
+  ...props
+}: {
+  href: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+  'aria-label'?: string;
+}) {
+  if (disabled) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full border border-border/60 px-3 py-1 text-xs text-muted-foreground/40"
+        {...props}
+      >
+        {children}
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card px-3 py-1 text-xs text-foreground transition-colors hover:border-foreground/30 hover:bg-muted/40"
+      {...props}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function PageNumbers({
+  page,
+  totalPages,
+  filter,
+}: {
+  page: number;
+  totalPages: number;
+  filter: string;
+}) {
+  const pages = computePageList(page, totalPages);
+  return (
+    <div className="hidden items-center gap-1 sm:flex">
+      {pages.map((p, i) =>
+        p === '…' ? (
+          <span
+            key={`gap-${i}`}
+            className="px-1 text-xs text-muted-foreground/60"
+            aria-hidden
+          >
+            …
+          </span>
+        ) : (
+          <Link
+            key={p}
+            href={hrefFor(filter, p)}
+            aria-current={p === page ? 'page' : undefined}
+            className={cn(
+              'inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 font-mono text-xs tabular-nums transition-colors',
+              p === page
+                ? 'bg-foreground text-background'
+                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+            )}
+          >
+            {p}
+          </Link>
+        ),
+      )}
+    </div>
+  );
+}
+
+/**
+ * 1 … 4 5 [6] 7 8 … 20 — always show first and last, neighbors of current,
+ * and ellipses for gaps. Keeps the strip from getting wide on big histories.
+ */
+function computePageList(current: number, total: number): Array<number | '…'> {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const out: Array<number | '…'> = [1];
+  const left = Math.max(2, current - 1);
+  const right = Math.min(total - 1, current + 1);
+  if (left > 2) out.push('…');
+  for (let p = left; p <= right; p++) out.push(p);
+  if (right < total - 1) out.push('…');
+  out.push(total);
+  return out;
 }
 
 function groupByDay(rows: Row[]): Array<{ label: string; rows: Row[] }> {

@@ -48,7 +48,8 @@ export default async function EditWorkflowPage({
     return (
       <>
         <PageHeader
-          title="Edit workflow"
+          eyebrow="Edit"
+          title={doc.name}
           description="Stored definition no longer matches the schema."
         />
         <Card>
@@ -67,7 +68,8 @@ export default async function EditWorkflowPage({
   return (
     <>
       <PageHeader
-        title="Edit workflow"
+        eyebrow="Edit workflow"
+        title={doc.name}
         description="Tweak the name, schedule, or individual steps. Changes save into the existing workflow."
       />
       <WorkflowEditor
