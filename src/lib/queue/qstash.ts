@@ -74,21 +74,13 @@ export async function scheduleWorkflow(
   input: ScheduleWorkflowInput,
 ): Promise<{ scheduleId: string }> {
   try {
-    // QStash reads cron timezone from the `Upstash-Cron-Tz` request header.
-    // The SDK's CreateScheduleRequest type doesn't expose it, but the SDK
-    // preserves any `Upstash-*` headers in `headers` as-is (its internal
-    // `isIgnoredHeader` skips the `Upstash-Forward-` prefixing for them),
-    // so we can inject it here without bypassing the SDK.
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (input.timezone && isValidTimezone(input.timezone)) {
-      headers['Upstash-Cron-Tz'] = input.timezone;
-    }
+    const cronExpression = buildCronExpression(input.cron, input.timezone);
 
     const req: CreateScheduleRequest = {
       destination: absoluteUrl('/api/qstash/workflow-execute'),
-      cron: input.cron,
+      cron: cronExpression,
       body: JSON.stringify({ workflowId: input.workflowId, scheduled: true }),
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       retries: 0,
     };
     const res = await client().schedules.create(req);
@@ -103,10 +95,22 @@ export async function scheduleWorkflow(
 }
 
 /**
- * Reject obviously-bad strings before they hit QStash. Legacy values like
- * `"BST"` (saved before we shipped the IANA picker) would otherwise cause
- * QStash to reject the schedule entirely; better to fall back to UTC.
+ * QStash reads cron timezone from a `CRON_TZ=<zone>` prefix inside the
+ * cron expression itself — there is no separate header. Format:
+ *   `CRON_TZ=America/New_York 0 9 * * *`
+ *
+ * Skips the prefix when no timezone is supplied or the value isn't a
+ * valid IANA name (e.g. legacy "BST" entries saved before we shipped
+ * the picker) — QStash would otherwise reject the whole schedule.
  */
+function buildCronExpression(cron: string, timezone?: string): string {
+  if (!timezone) return cron;
+  if (!isValidTimezone(timezone)) return cron;
+  // Defense: don't double-prefix if the caller already supplied one.
+  if (/^\s*CRON_TZ=/.test(cron)) return cron;
+  return `CRON_TZ=${timezone} ${cron}`;
+}
+
 function isValidTimezone(tz: string): boolean {
   try {
     Intl.DateTimeFormat(undefined, { timeZone: tz });
