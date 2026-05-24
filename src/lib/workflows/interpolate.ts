@@ -81,8 +81,22 @@ export function interpolateValue<T>(value: T, context: Record<string, unknown>):
     // Optimization: a string consisting of a single `{{path}}` returns the
     // raw resolved value (preserving type) instead of stringifying. This is
     // important for numeric/boolean refs in expressions and config fields.
+    //
+    // EXCEPTION: if the path doesn't resolve, fall back to empty string so
+    // the result matches `interpolate`'s missing-path behavior. Without
+    // this, an unresolved ref inside `notion.create_page`'s nested property
+    // shapes leaks `undefined` through to Notion's SDK, which rejects it
+    // with a confusing "should be defined" error.
     const sole = matchSoleTemplate(value);
-    if (sole !== null) return getByPath(context, sole);
+    if (sole !== null) {
+      const resolved = getByPath(context, sole);
+      // Treat null AND undefined as "missing" — matches `interpolate`'s
+      // behavior for multi-token templates. Without this, Gmail headers
+      // that come back as `null` (no Subject line, etc.) leak through to
+      // Notion's SDK, which strips nulls and then rejects the resulting
+      // undefined property with "should be defined" errors.
+      return resolved == null ? '' : resolved;
+    }
     return interpolate(value, context);
   }
   if (Array.isArray(value)) {

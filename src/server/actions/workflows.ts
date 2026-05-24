@@ -253,7 +253,7 @@ export const setWorkflowStatus = safeAction(setStatusSchema, async ({ workflowId
   const updated = await Workflow.findOneAndUpdate(
     { _id, userId: user._id },
     { $set: { status, qstashScheduleId: newScheduleId } },
-    { new: true },
+    { returnDocument: 'after' },
   );
   if (!updated) throw new NotFoundError('Workflow not found.');
 

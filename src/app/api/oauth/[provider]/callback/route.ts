@@ -59,7 +59,7 @@ async function upsertIntegration(input: UpsertInput): Promise<void> {
         connectedAt: new Date(),
       },
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
   );
 }
 

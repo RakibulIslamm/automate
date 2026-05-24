@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { stepSchema, type Step } from '@/lib/workflows/dsl';
 import { STEP_META } from './step-meta';
+import { ResourceSelect } from './resource-select';
 
 interface Props {
   step: Step | null;
@@ -165,7 +166,17 @@ function renderFields(
     case 'drive.upload_file':
       return (
         <>
-          <Field label="Folder name">
+          <Field label="Folder" hint="Pick an existing Drive folder, or leave blank and use “Folder name” to find/create one.">
+            <ResourceSelect
+              fetchUrl={`/api/integrations/drive/folders?integrationId=${encodeURIComponent(step.config.integrationId)}`}
+              listKey="folders"
+              value={step.config.folderId ?? ''}
+              onChange={(v) => set('folderId' as never, v || undefined)}
+              placeholder="Pick a Drive folder…"
+              customLabel="Paste folder id manually"
+            />
+          </Field>
+          <Field label="Folder name" hint="Used if no folder id is picked above; we'll find or create a folder with this name.">
             <Input
               value={step.config.folderName ?? ''}
               onChange={onString((v) => set('folderName' as never, v || undefined))}
@@ -187,15 +198,34 @@ function renderFields(
       );
     case 'drive.create_folder':
       return (
-        <Field label="Folder name">
-          <Input value={step.config.name} onChange={onString((v) => set('name' as never, v))} />
-        </Field>
+        <>
+          <Field label="Folder name">
+            <Input value={step.config.name} onChange={onString((v) => set('name' as never, v))} />
+          </Field>
+          <Field label="Parent folder" hint="Optional. Leave blank to create at the Drive root.">
+            <ResourceSelect
+              fetchUrl={`/api/integrations/drive/folders?integrationId=${encodeURIComponent(step.config.integrationId)}`}
+              listKey="folders"
+              value={step.config.parentId ?? ''}
+              onChange={(v) => set('parentId' as never, v || undefined)}
+              placeholder="Drive root…"
+              customLabel="Paste folder id manually"
+            />
+          </Field>
+        </>
       );
     case 'slack.post_message':
       return (
         <>
-          <Field label="Channel" hint="Channel id (`C…`) or name (`#general`).">
-            <Input value={step.config.channel} onChange={onString((v) => set('channel' as never, v))} />
+          <Field label="Channel" hint="Pick from channels the AutoMate bot is a member of.">
+            <ResourceSelect
+              fetchUrl={`/api/integrations/slack/channels?integrationId=${encodeURIComponent(step.config.integrationId)}`}
+              listKey="channels"
+              value={step.config.channel}
+              onChange={(v) => set('channel' as never, v)}
+              placeholder="Pick a Slack channel…"
+              customLabel="Paste channel id manually"
+            />
           </Field>
           <Field label="Message">
             <Textarea
@@ -209,8 +239,15 @@ function renderFields(
     case 'notion.create_page':
       return (
         <>
-          <Field label="Database (data source) id">
-            <Input value={step.config.databaseId} onChange={onString((v) => set('databaseId' as never, v))} />
+          <Field label="Database" hint="Pick from databases you've shared with the AutoMate integration in Notion.">
+            <ResourceSelect
+              fetchUrl={`/api/integrations/notion/databases?integrationId=${encodeURIComponent(step.config.integrationId)}`}
+              listKey="databases"
+              value={step.config.databaseId}
+              onChange={(v) => set('databaseId' as never, v)}
+              placeholder="Pick a Notion database…"
+              customLabel="Paste database id manually"
+            />
           </Field>
           <Field label="Properties (JSON)">
             <Textarea

@@ -1,15 +1,41 @@
 import type { IntegrationProvider } from '@/lib/db/models';
 
 /**
- * Available integration as seen by the AI. We include the provider, the
- * stable internal id (so the model can wire it into step configs verbatim),
- * and the human-friendly display name (so the model can reference it back
- * to the user in `description`).
+ * Available integration as seen by the AI. Beyond the basic identity
+ * (provider + id + display name), each entry can carry provider-specific
+ * resources we resolved at build time:
+ *
+ *   - Notion: the list of databases the bot has been granted access to.
+ *     The AI picks one of these ids verbatim instead of emitting a
+ *     placeholder string like "your_inbox_database_id" that the user
+ *     would have to find and paste manually.
+ *   - Slack: a snapshot of channels — same idea. The AI can use
+ *     "C0123..." ids directly rather than `#channel` strings the user
+ *     would need to translate.
  */
+export interface NotionDatabaseRef {
+  id: string;
+  title: string;
+  /**
+   * The database's column schema. When present, the AI is instructed to
+   * use ONLY these names + types when emitting `notion.create_page`
+   * propertyTemplates — no inventing columns, no `rich_text` going into
+   * an email column.
+   */
+  columns?: Array<{ name: string; type: string }>;
+}
+
+export interface SlackChannelRef {
+  id: string;
+  name: string;
+}
+
 export interface AvailableIntegration {
   id: string;
   provider: IntegrationProvider;
   displayName: string;
+  notionDatabases?: NotionDatabaseRef[];
+  slackChannels?: SlackChannelRef[];
 }
 
 /**
@@ -26,10 +52,27 @@ export function buildSystemPrompt({
     availableIntegrations.length === 0
       ? '- (none — the user has not connected any integrations yet)'
       : availableIntegrations
-          .map(
-            (i) =>
-              `- ${i.provider} → id: "${i.id}" (account: ${i.displayName})`,
-          )
+          .map((i) => {
+            const lines = [`- ${i.provider} → id: "${i.id}" (account: ${i.displayName})`];
+            if (i.notionDatabases && i.notionDatabases.length > 0) {
+              lines.push('    Notion databases this account can write to:');
+              for (const db of i.notionDatabases) {
+                lines.push(`      • "${db.title}" → databaseId: "${db.id}"`);
+                if (db.columns && db.columns.length > 0) {
+                  lines.push(
+                    `          columns: ${db.columns.map((c) => `${c.name} (${c.type})`).join(', ')}`,
+                  );
+                }
+              }
+            }
+            if (i.slackChannels && i.slackChannels.length > 0) {
+              lines.push('    Slack channels this account can post to:');
+              for (const ch of i.slackChannels) {
+                lines.push(`      • #${ch.name} → channelId: "${ch.id}"`);
+              }
+            }
+            return lines.join('\n');
+          })
           .join('\n');
 
   return `You are the AutoMate workflow builder. AutoMate is a Zapier-like automation platform where users describe automations in plain English and the system runs them.
@@ -59,6 +102,12 @@ A workflow has:
 3. \`gmail.email_received\` — runs when a new Gmail message matches a query.
    - config: \`{ integrationId: string, query: string }\`
    - \`query\` uses Gmail search syntax: \`from:invoices@vendor.com has:attachment subject:invoice\`, etc.
+   - **Gmail search doesn't stem.** \`subject:task\` matches the word "task" but NOT "tasks" or "tasked". When the user mentions a concept loosely ("any task-related email", "anything about invoices", "TODO or task"), EXPAND the query to all reasonable variants using \`OR\`. Examples:
+     - "any task-related email" → \`subject:(todo OR todos OR task OR tasks OR action)\`
+     - "anything about invoices" → \`subject:(invoice OR invoices OR bill OR billing OR payment)\`
+     - "follow-ups from clients" → \`subject:(followup OR follow-up OR following up)\`
+   - Case is already insensitive in Gmail — don't duplicate \`Task\` and \`task\`.
+   - To match anywhere in the message (subject + body + snippet), drop the \`subject:\` prefix and use bare terms: \`(todo OR task OR tasks)\`.
 
 ## Steps
 
@@ -84,11 +133,26 @@ Uploads a file to Google Drive.
 
 ### slack.post_message
 - config: \`{ integrationId, channel: string, messageTemplate: string }\`
-- \`channel\` is a Slack channel id (\`C…\`) or \`#name\`.
+- \`channel\` MUST be a real Slack channel id (\`C…\`) from the available-integrations list below — NEVER \`#name\` placeholders. If the user mentions "#finance" but no matching channel exists in the list, return the "missing integration" empty-steps response described further down (set name to "(Missing: Slack channel #finance)").
 
 ### notion.create_page
 - config: \`{ integrationId, databaseId: string, propertiesTemplate: object }\`
-- \`propertiesTemplate\` uses Notion's property-object shape, with \`{{…}}\` refs allowed inside values.
+- \`databaseId\` MUST be one of the real database ids listed under the user's Notion integration below — NEVER a placeholder like \`"your_inbox_database_id"\` or \`"<db_id>"\`. If none of the listed databases match the user's request, pick the most likely one by name match (case-insensitive substring). If the user has zero Notion databases in the list, return the missing-integration empty-steps response (set name to "(Missing: Notion database)" and ask them to share a database with the AutoMate integration in Notion).
+- \`propertiesTemplate\` keys MUST come from the chosen database's \`columns\` list shown below — NEVER invent column names. If a column the user obviously wants doesn't exist (e.g. they say "save the sender's email" but there's no email column), simply skip it.
+- Each property's value shape MUST match the column's type. Use these exact shapes:
+  - \`title\`     → \`{ "title": [{ "type": "text", "text": { "content": "<value or {{ref}}>" } }] }\`
+  - \`rich_text\` → \`{ "rich_text": [{ "type": "text", "text": { "content": "<value or {{ref}}>" } }] }\`
+  - \`email\`     → \`{ "email": "<value or {{ref}}>" }\` (just the address, no angle brackets)
+  - \`url\`       → \`{ "url": "<value or {{ref}}>" }\`
+  - \`phone_number\` → \`{ "phone_number": "<value or {{ref}}>" }\`
+  - \`number\`    → \`{ "number": <numeric value or {{ref}}> }\`
+  - \`checkbox\`  → \`{ "checkbox": true|false }\`
+  - \`date\`      → \`{ "date": { "start": "<ISO 8601 or {{ref}}>" } }\`
+  - \`select\`    → \`{ "select": { "name": "<value or {{ref}}>" } }\`
+  - \`status\`    → \`{ "status": { "name": "<value or {{ref}}>" } }\`
+  - \`multi_select\` → \`{ "multi_select": [{ "name": "<value>" }, ...] }\`
+- Skip columns of type \`created_time\`, \`last_edited_time\`, \`created_by\`, \`last_edited_by\`, \`formula\`, \`rollup\`, \`unique_id\` — those are read-only.
+- \`{{…}}\` template refs are allowed inside any string value above.
 
 ### calendar.create_event
 - config: \`{ integrationId, summary, startTimeTemplate, endTimeTemplate, descriptionTemplate? }\`
@@ -124,10 +188,12 @@ Forward references are illegal — a step can only reference itself or steps tha
 
 ${integrationLines}
 
-When choosing an \`integrationId\` for any step or trigger config, use one of the ids above verbatim. NEVER invent an id. If the user's request needs an integration that is NOT in the list above:
+When choosing an \`integrationId\` for any step or trigger config, use one of the ids above verbatim. NEVER invent an id. The same rule applies to Notion \`databaseId\` and Slack \`channel\` values — use ONLY ids that appear in the list above. **Never emit placeholder strings** like \`"your_inbox_database_id"\`, \`"<channel_id>"\`, \`"YOUR_DATABASE_ID_HERE"\`, etc. If the resource the user needs isn't listed, treat it as a missing integration (see below).
+
+If the user's request needs an integration (or a Notion database / Slack channel) that is NOT in the list above:
 - Return a workflow with \`steps: []\`.
-- Set \`name\` to \`"(Missing: <Provider>)"\`, e.g. \`"(Missing: Slack)"\` or \`"(Missing: Microsoft Teams)"\` for unsupported tools.
-- In \`description\`, tell the user what they need to connect, e.g. \`"Connect Slack from /dashboard/integrations to enable this workflow."\`
+- Set \`name\` to \`"(Missing: <thing>)"\`, e.g. \`"(Missing: Slack)"\`, \`"(Missing: Notion database)"\`, or \`"(Missing: Microsoft Teams)"\` for unsupported tools.
+- In \`description\`, tell the user what to do, e.g. \`"Share an Inbox database with the AutoMate integration in Notion, then try again."\` or \`"Connect Slack from the Integrations page to enable this workflow."\`
 - Pick \`trigger.type: "manual"\` with empty config so the schema still validates.
 
 # Worked examples

@@ -29,7 +29,7 @@ export async function recordRunUsage({ userId, runId }: RecordRunInput): Promise
   const updated = await User.findByIdAndUpdate(
     new Types.ObjectId(userId),
     { $inc: { 'usage.runsThisPeriod': 1 } },
-    { new: true, select: 'plan usage stripeCustomerId' },
+    { returnDocument: 'after', select: 'plan usage stripeCustomerId' },
   ).lean();
   if (!updated) return;
 

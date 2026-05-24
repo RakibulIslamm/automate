@@ -2,7 +2,10 @@ import 'server-only';
 import { generateText } from 'ai';
 import { z } from 'zod';
 import { claude } from '@/lib/ai/openrouter';
-import { workflowDefinitionSchema, type WorkflowDefinition } from './dsl';
+import {
+  workflowDefinitionAiResponseSchema,
+  type WorkflowDefinition,
+} from './dsl';
 import { validateWorkflow } from './validator';
 import { buildSystemPrompt, type AvailableIntegration } from '@/lib/ai/prompts/workflow-builder';
 import { WorkflowExecutionError } from '@/lib/errors';
@@ -21,7 +24,7 @@ import { logError } from '@/lib/tracking/log-error';
 const aiResultSchema = z.object({
   suggestedName: z.string().min(1).max(80),
   suggestedDescription: z.string().min(1).max(200),
-  definition: workflowDefinitionSchema,
+  definition: workflowDefinitionAiResponseSchema,
 });
 
 export type AiBuilderResult = {
@@ -80,6 +83,10 @@ export async function buildWorkflowFromPrompt(
         system: `${system}\n\n# Output format\n\nReturn ONE valid JSON object — no prose, no markdown fences. The JSON MUST have exactly these top-level keys:\n  - "suggestedName" (string, ≤ 80 chars)\n  - "suggestedDescription" (string, ≤ 200 chars)\n  - "definition" (the WorkflowDefinition described above)\n\nIf you wrap the JSON in a code fence we strip it, but unfenced raw JSON is preferred.`,
         messages,
         temperature: 0.2,
+        // Budget models (DeepSeek flash, etc) default to a small output cap;
+        // workflows with several steps + the JSON wrapper easily exceed it,
+        // truncating mid-emission and tripping the parser. Give it plenty.
+        maxOutputTokens: 4000,
       });
       text = result.text;
     } catch (err) {
@@ -94,6 +101,13 @@ export async function buildWorkflowFromPrompt(
     const parsed = tryParseAiResult(text);
     if (!parsed.ok) {
       lastErrors = [parsed.error];
+      // Echo the raw text to the terminal so a developer can diagnose
+      // "model returned non-JSON" vs. "model returned truncated JSON".
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ai-builder] parse failed (attempt ${attempt}/${MAX_ATTEMPTS}) — ${parsed.error}\n` +
+          `--- begin model response (${text.length} chars) ---\n${text}\n--- end ---`,
+      );
       if (attempt === MAX_ATTEMPTS) {
         await logError(new Error('AI builder JSON parse failed after retries'), {
           source: 'ai-builder.parse',

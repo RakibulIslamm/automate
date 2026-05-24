@@ -89,6 +89,71 @@ export async function createPage(
   return wrap(client.pages.create(input), 'pages.create');
 }
 
+/**
+ * Look up the property schema of a Notion data source (database). Used by
+ * the page-create executor to pre-filter unknown property names — Notion
+ * rejects the whole request if you send a property the database doesn't
+ * have, so a single typo or stale workflow blows up the whole step.
+ *
+ * Returns a plain map of `{ propertyName: notionType }`. Missing data
+ * source → throws ExternalServiceError, caller decides whether to
+ * fail or degrade.
+ */
+export async function getDatabasePropertyNames(
+  integrationId: string,
+  databaseId: string,
+): Promise<Map<string, string>> {
+  const client = await getNotionClient(integrationId);
+  const res = await wrap(
+    client.dataSources.retrieve({ data_source_id: databaseId }),
+    'dataSources.retrieve',
+  );
+  const out = new Map<string, string>();
+  const props = (res as { properties?: Record<string, { type?: string }> }).properties ?? {};
+  for (const [name, def] of Object.entries(props)) {
+    out.set(name, def?.type ?? 'unknown');
+  }
+  return out;
+}
+
+export interface NotionDatabaseColumn {
+  name: string;
+  type: string;
+}
+
+export interface NotionDatabaseWithSchema extends NotionDatabaseHit {
+  columns: NotionDatabaseColumn[];
+}
+
+/**
+ * List databases AND fetch each one's column schema in parallel. Used by
+ * the workflow builder so the AI can generate property templates that
+ * match the user's actual database shape — no more `From: rich_text` going
+ * into an email column.
+ *
+ * Per-database schema failures are non-fatal: a database we can list but
+ * can't retrieve (Notion permission edge case) is returned with an empty
+ * `columns` array so the AI can still pick it.
+ */
+export async function listDatabasesWithSchema(
+  integrationId: string,
+): Promise<NotionDatabaseWithSchema[]> {
+  const dbs = await listDatabases(integrationId);
+  return Promise.all(
+    dbs.map(async (db): Promise<NotionDatabaseWithSchema> => {
+      try {
+        const schema = await getDatabasePropertyNames(integrationId, db.id);
+        return {
+          ...db,
+          columns: Array.from(schema.entries()).map(([name, type]) => ({ name, type })),
+        };
+      } catch {
+        return { ...db, columns: [] };
+      }
+    }),
+  );
+}
+
 export async function appendBlocks(
   integrationId: string,
   blockId: string,

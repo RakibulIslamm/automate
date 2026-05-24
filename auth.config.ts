@@ -14,7 +14,13 @@ import Google from 'next-auth/providers/google';
 
 const PUBLIC_PATHS = ['/', '/sign-in', '/sign-up', '/pricing'];
 const PUBLIC_PREFIXES = ['/legal/', '/api/auth/'];
-const PUBLIC_EXACT = new Set(['/api/internal/health']);
+const PUBLIC_EXACT = new Set([
+  '/api/internal/health',
+  // Signature-verified by the route handler itself — must bypass session auth.
+  '/api/qstash/workflow-execute',
+  '/api/triggers/poll',
+  '/api/stripe/webhook',
+]);
 const AUTH_PAGES = new Set(['/sign-in', '/sign-up']);
 
 function isPublicPath(pathname: string): boolean {

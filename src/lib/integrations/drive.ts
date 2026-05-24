@@ -97,6 +97,34 @@ export async function listFiles(
   return res.data.files ?? [];
 }
 
+export interface DriveFolderRef {
+  id: string;
+  name: string;
+}
+
+/**
+ * Folders the user can see, capped at 100 — enough for a dropdown UI.
+ * Excludes trashed folders and sorts by recency so the most-likely
+ * targets float to the top.
+ */
+export async function listFolders(integrationId: string): Promise<DriveFolderRef[]> {
+  const drive = await getClient(integrationId);
+  const res = await wrap(
+    drive.files.list({
+      q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+      fields: 'files(id, name)',
+      orderBy: 'modifiedTime desc',
+      pageSize: 100,
+    }),
+    'listFolders',
+  );
+  return (res.data.files ?? [])
+    .filter((f): f is drive_v3.Schema$File & { id: string; name: string } =>
+      Boolean(f.id && f.name),
+    )
+    .map((f) => ({ id: f.id, name: f.name }));
+}
+
 function escapeForDriveQuery(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }

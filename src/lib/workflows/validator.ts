@@ -87,6 +87,7 @@ function walk(steps: Step[], ctx: WalkCtx): void {
     ctx.idToType.set(step.id, step.type);
 
     checkIntegrationId(step, ctx);
+    checkPlaceholderIds(step, ctx);
     checkTemplateRefs(step, ctx);
 
     if (step.type === 'condition.if') {
@@ -132,6 +133,53 @@ function readIntegrationId(step: Step): string | undefined {
   if (step.type === 'condition.if' || step.type === 'ai.transform') return undefined;
   const config = step.config as { integrationId?: unknown };
   return typeof config.integrationId === 'string' ? config.integrationId : undefined;
+}
+
+/**
+ * The AI sometimes ignores the system prompt and emits placeholder strings
+ * (`your_inbox_database_id`, `<channel_id>`, `YOUR_DATABASE_ID_HERE`)
+ * instead of a real resource id. They pass shape validation — they're
+ * strings — and only fail at runtime when Notion/Slack reject them.
+ * Catch those here so a user-facing save error fires instead of a
+ * silent landmine in production.
+ */
+const PLACEHOLDER_PATTERNS = [
+  /^your_.*_id$/i,
+  /^<.*_?id>$/i,
+  /^YOUR_.*_(ID|HERE)$/,
+  /placeholder/i,
+  /^example_/i,
+];
+
+function looksLikePlaceholder(value: string): boolean {
+  return PLACEHOLDER_PATTERNS.some((re) => re.test(value));
+}
+
+function checkPlaceholderIds(step: Step, ctx: WalkCtx): void {
+  if (step.type === 'notion.create_page') {
+    const dbId = (step.config as { databaseId?: unknown }).databaseId;
+    if (typeof dbId === 'string' && looksLikePlaceholder(dbId)) {
+      ctx.errors.push(
+        `Step "${step.id}": databaseId "${dbId}" looks like a placeholder. Replace it with a real Notion database id (share the database with the AutoMate integration in Notion first).`,
+      );
+    }
+  }
+  if (step.type === 'slack.post_message') {
+    const channel = (step.config as { channel?: unknown }).channel;
+    if (typeof channel === 'string' && looksLikePlaceholder(channel)) {
+      ctx.errors.push(
+        `Step "${step.id}": channel "${channel}" looks like a placeholder. Replace it with a real Slack channel id.`,
+      );
+    }
+  }
+  if (step.type === 'drive.create_folder' || step.type === 'drive.upload_file') {
+    const folderId = (step.config as { folderId?: unknown }).folderId;
+    if (typeof folderId === 'string' && looksLikePlaceholder(folderId)) {
+      ctx.errors.push(
+        `Step "${step.id}": folderId "${folderId}" looks like a placeholder. Replace it with a real Drive folder id or use folderName instead.`,
+      );
+    }
+  }
 }
 
 function checkTemplateRefs(step: Step, ctx: WalkCtx): void {

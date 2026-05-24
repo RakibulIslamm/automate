@@ -249,6 +249,20 @@ export const workflowDefinitionSchema = z.object({
 
 export type WorkflowDefinition = z.infer<typeof workflowDefinitionSchema>;
 
+/**
+ * Looser variant used ONLY by the AI builder. Allows `steps: []` so the
+ * "(Missing: <thing>)" sentinel response can flow through Zod and reach
+ * the explicit empty-steps branch in `ai-builder.ts`. The canonical
+ * schema above still requires ≥ 1 step at save time, so an empty-steps
+ * workflow can never be persisted — it's purely a transport shape.
+ */
+export const workflowDefinitionAiResponseSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+  trigger: triggerSchema,
+  steps: z.array(stepSchema),
+});
+
 /* ─────────────────────────── type helpers ────────────────────────────── */
 
 export type StepOfType<T extends StepType> = Extract<Step, { type: T }>;
