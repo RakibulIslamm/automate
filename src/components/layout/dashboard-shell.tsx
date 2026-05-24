@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { ShieldAlert, Menu, X, Command } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UserMenu } from './user-menu';
+import { ThemeToggle } from './theme-toggle';
 import { CommandPalette, openCommandPalette } from './command-palette';
 import { DASHBOARD_NAV_MAIN, DASHBOARD_NAV_BOTTOM, type NavItem } from './nav-config';
 
@@ -55,6 +56,8 @@ export function DashboardShell({ user, isAdmin, children }: DashboardShellProps)
                 ⌘K
               </kbd>
             </button>
+
+            <ThemeToggle />
 
             <UserMenu user={user} />
 
