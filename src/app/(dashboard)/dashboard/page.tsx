@@ -38,11 +38,15 @@ export default async function OverviewPage() {
     ? new Date(user.usage.periodStart)
     : new Date(now.getFullYear(), now.getMonth(), 1);
 
-  // Pull every count we need in parallel.
+  // The single source of truth for "runs this period" is the same counter
+  // billing uses (`user.usage.runsThisPeriod`) — incremented by
+  // `recordRunUsage` on every executed run (manual + scheduled + Gmail
+  // poll). Reading it here keeps Overview and Billing from drifting.
+  const runsThisPeriod = user.usage?.runsThisPeriod ?? 0;
+
   const [
     workflowCounts,
     runAgg,
-    runsThisMonth,
     integrationsCount,
     recentRunDocs,
   ] = await Promise.all([
@@ -54,7 +58,6 @@ export default async function OverviewPage() {
       { $match: { userId, createdAt: { $gte: periodStart } } },
       { $group: { _id: '$status', n: { $sum: 1 } } },
     ]),
-    WorkflowRun.countDocuments({ userId, createdAt: { $gte: periodStart } }),
     Integration.countDocuments({ userId, status: 'active' }),
     WorkflowRun.find({ userId })
       .sort({ createdAt: -1 })
@@ -77,7 +80,7 @@ export default async function OverviewPage() {
   const plan = getPlan(user.plan ?? 'free');
   const usagePct = plan.runsPerMonth === 0
     ? 0
-    : Math.min(100, (runsThisMonth / plan.runsPerMonth) * 100);
+    : Math.min(100, (runsThisPeriod / plan.runsPerMonth) * 100);
 
   // Map workflow names by id for the recent-runs table (one extra query
   // is fine; runsList is capped at 8).
@@ -98,7 +101,7 @@ export default async function OverviewPage() {
     durationMs: typeof r.durationMs === 'number' ? r.durationMs : null,
   }));
 
-  const isEmpty = totalWorkflows === 0 && runsThisMonth === 0 && integrationsCount === 0;
+  const isEmpty = totalWorkflows === 0 && runsThisPeriod === 0 && integrationsCount === 0;
 
   return (
     <>
@@ -121,14 +124,14 @@ export default async function OverviewPage() {
         <Tile className="md:col-span-3 md:row-span-2">
           <StatLabel>This period</StatLabel>
           <p className="mt-2 font-serif text-6xl leading-none tracking-tight tabular-nums sm:text-7xl">
-            {runsThisMonth.toLocaleString()}
+            {runsThisPeriod.toLocaleString()}
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
             workflow runs since{' '}
             {periodStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
           </p>
           <div className="mt-auto">
-            <UsageBar pct={usagePct} runs={runsThisMonth} cap={plan.runsPerMonth} planName={plan.name} />
+            <UsageBar pct={usagePct} runs={runsThisPeriod} cap={plan.runsPerMonth} planName={plan.name} />
           </div>
         </Tile>
 

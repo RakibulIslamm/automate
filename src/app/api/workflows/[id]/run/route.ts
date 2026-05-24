@@ -9,6 +9,8 @@ import { executeWorkflow } from '@/lib/workflows/executor';
 import { listEmails, getMessage } from '@/lib/integrations/gmail';
 import type { WorkflowDefinition } from '@/lib/workflows/dsl';
 import { enqueueWorkflowRun } from '@/lib/queue/qstash';
+import { checkCanRunWorkflow } from '@/lib/usage/check-quota';
+import { recordRunUsage } from '@/lib/usage/record-run';
 import { trackEvent } from '@/lib/tracking/event';
 import { logError } from '@/lib/tracking/log-error';
 
@@ -87,6 +89,18 @@ export async function POST(
       );
     }
 
+    // Quota gate — same check the QStash/cron path applies, just earlier.
+    // Manual runs must respect the user's plan limit or we'd let them
+    // bypass billing entirely by clicking Run now.
+    const quota = await checkCanRunWorkflow(userId);
+    if (!quota.allowed) {
+      return jsonError(
+        'QUOTA_EXCEEDED',
+        quota.reason ?? 'You\'re out of runs for this period.',
+        402,
+      );
+    }
+
     const definition = workflow.definition as WorkflowDefinition;
     const explicitTriggerData = isExplicitTriggerData(body.triggerData) ? body.triggerData : null;
 
@@ -131,6 +145,12 @@ export async function POST(
       runId: String(run._id),
       triggerData,
     });
+
+    // Record usage AFTER execution. Same policy as the QStash callback —
+    // failed runs still count toward quota. Never throws.
+    await recordRunUsage({ userId, runId: String(run._id) }).catch((err) =>
+      logError(err, { source: 'api.workflows.run.recordUsage' }),
+    );
 
     return NextResponse.json({ data: { runId: String(run._id) } });
   } catch (err) {
