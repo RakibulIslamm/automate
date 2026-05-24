@@ -37,20 +37,28 @@ interface ZoneOption {
  * `Intl.supportedValuesOf('timeZone')` returns every IANA zone the current
  * runtime knows about (typically ~420). It's been available in all major
  * browsers + Node since mid-2022. We compute this once per mount.
+ *
+ * We force-include `UTC` because not every runtime returns it from
+ * `supportedValuesOf` — some only return `Etc/UTC`. The Quick row uses
+ * the bare `UTC` string, so leaving it out causes a "(custom)" tag to
+ * appear after selection.
  */
 function buildZoneList(): ZoneOption[] {
-  const names: string[] = (Intl as unknown as {
+  const fromIntl: string[] = (Intl as unknown as {
     supportedValuesOf?: (key: 'timeZone') => string[];
   }).supportedValuesOf?.('timeZone') ?? [];
 
+  const names = new Set<string>(fromIntl);
+  names.add('UTC');
+
   const now = new Date();
-  return names
+  return Array.from(names)
     .map<ZoneOption>((name) => {
       const offsetMinutes = getOffsetMinutes(name, now);
       return {
         name,
         label: name.replace(/_/g, ' '),
-        region: name.split('/')[0] ?? 'Other',
+        region: name.includes('/') ? (name.split('/')[0] ?? 'Other') : 'UTC',
         offset: formatOffset(offsetMinutes),
         offsetMinutes,
       };
