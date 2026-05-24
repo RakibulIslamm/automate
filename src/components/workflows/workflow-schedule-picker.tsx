@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { TimezoneSelect } from './timezone-select';
 
 export interface SchedulePickerValue {
   cron: string;
@@ -104,15 +105,14 @@ export function WorkflowSchedulePicker({ value, onChange }: Props) {
             <p className="text-sm font-medium">{preview.text}</p>
           )}
         </div>
-        <div className="w-full sm:w-56">
+        <div className="w-full sm:w-64">
           <Label htmlFor="cron-tz" className="text-xs uppercase tracking-wide text-muted-foreground">
             Timezone
           </Label>
-          <Input
+          <TimezoneSelect
             id="cron-tz"
             value={value.timezone}
-            onChange={(e) => onChange({ ...value, timezone: e.target.value })}
-            placeholder="UTC"
+            onChange={(tz) => onChange({ ...value, timezone: tz })}
           />
         </div>
       </div>
