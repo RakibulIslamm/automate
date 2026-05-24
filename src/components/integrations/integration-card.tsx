@@ -83,6 +83,9 @@ export interface IntegrationCardProps {
   scopeLabels?: Record<string, string>;
   scopeListLabel?: string | null;
   integration: ExistingIntegration | null;
+  /** Optional inline notice rendered above the footer — used for
+   * provider-specific tips (e.g. Slack's private-channel /invite step). */
+  notice?: ReactNode;
 }
 
 export function IntegrationCard({
@@ -97,6 +100,7 @@ export function IntegrationCard({
   scopeLabels = {},
   scopeListLabel = 'Scopes',
   integration,
+  notice,
 }: IntegrationCardProps) {
   const [pending, startTransition] = useTransition();
   const connected = integration !== null;
@@ -205,6 +209,8 @@ export function IntegrationCard({
           </ul>
         )}
       </div>
+
+      {notice ? <div className="mt-5 px-6">{notice}</div> : null}
 
       {/* Footer actions */}
       <div className="mt-6 flex flex-wrap items-center justify-end gap-1 border-t border-border/60 bg-muted/20 px-3 py-2">

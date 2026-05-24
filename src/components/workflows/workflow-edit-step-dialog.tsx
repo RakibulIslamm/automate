@@ -229,6 +229,12 @@ function renderFields(
               customLabel="Paste channel id manually"
             />
           </Field>
+          <p className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+            <strong className="text-foreground">Private channel?</strong> Slack requires you to
+            invite the bot once. In Slack, open the channel and run{' '}
+            <code className="rounded bg-background px-1 py-0.5 font-mono text-[10.5px]">/invite @automate</code>.
+            Public channels are added automatically on first run.
+          </p>
           <Field label="Message">
             <Textarea
               rows={6}
