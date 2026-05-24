@@ -77,13 +77,18 @@ export default async function WorkflowDetailPage({ params }: Props) {
 
   const status = doc.status as WorkflowStatus;
 
-  // Run-now eligibility: every integration referenced by the workflow must
-  // be currently active. We only block when we can prove a problem; missing
-  // detection still lets the user click through and see the executor's
-  // friendly failure message.
-  const blockReason = definition
-    ? await checkIntegrationsHealthy(definition, String(user._id))
-    : null;
+  // Run-now eligibility: paused/error states block, and every integration
+  // referenced by the workflow must be currently active. We only block when
+  // we can prove a problem; missing detection still lets the user click
+  // through and see the executor's friendly failure message.
+  const blockReason =
+    status === 'paused'
+      ? 'This workflow is paused. Resume it to run.'
+      : status === 'error'
+        ? 'This workflow is in an error state. Fix it and resume to run.'
+        : definition
+          ? await checkIntegrationsHealthy(definition, String(user._id))
+          : null;
 
   // Fetch this workflow's runs for the Runs tab.
   const runDocs = await WorkflowRun.find({ workflowId: doc._id, userId: user._id })

@@ -38,8 +38,15 @@ export default async function RunDetailPage({ params }: Props) {
   if (!run) notFound();
 
   const workflow = await Workflow.findOne({ _id: run.workflowId })
-    .select('name')
+    .select('name status')
     .lean();
+
+  const workflowPausedReason =
+    workflow?.status === 'paused'
+      ? 'This workflow is paused. Resume it to run.'
+      : workflow?.status === 'error'
+        ? 'This workflow is in an error state. Fix it and resume to run.'
+        : null;
 
   const stepResults = ((run.stepResults ?? []) as RenderedStepResult[]).map(
     serializeStepResult,
@@ -138,6 +145,8 @@ export default async function RunDetailPage({ params }: Props) {
               workflowId={String(run.workflowId)}
               label="Re-run"
               triggerData={run.triggerData}
+              disabled={workflowPausedReason !== null}
+              disabledReason={workflowPausedReason ?? undefined}
             />
           </div>
         </section>

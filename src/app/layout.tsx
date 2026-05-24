@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono, Instrument_Serif } from 'next/font/google';
+import { Geist, Geist_Mono, Fraunces } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -17,10 +17,13 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
-const instrumentSerif = Instrument_Serif({
+const fraunces = Fraunces({
   variable: '--font-serif',
   subsets: ['latin'],
-  weight: '400',
+  // Variable axes: SOFT softens terminals, opsz auto-tunes for size.
+  // We pin SOFT to a mid value so headlines feel warm but not playful.
+  axes: ['SOFT', 'opsz'],
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -45,7 +48,7 @@ export default function RootLayout({
         'h-full antialiased',
         geistSans.variable,
         geistMono.variable,
-        instrumentSerif.variable,
+        fraunces.variable,
       )}
     >
       <body suppressHydrationWarning className="min-h-full flex flex-col font-sans">

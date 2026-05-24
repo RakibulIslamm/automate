@@ -70,6 +70,23 @@ export async function POST(
     const workflow = await Workflow.findOne({ _id: workflowId, userId });
     if (!workflow) throw new NotFoundError('Workflow not found.');
 
+    // Honor pause/error states — pausing is a user-initiated intent to stop
+    // the workflow from running, so "Run now" must respect it too.
+    if (workflow.status === 'paused') {
+      return jsonError(
+        'WORKFLOW_PAUSED',
+        'This workflow is paused. Resume it to run.',
+        409,
+      );
+    }
+    if (workflow.status === 'error') {
+      return jsonError(
+        'WORKFLOW_ERROR',
+        'This workflow is in an error state. Fix it and resume to run.',
+        409,
+      );
+    }
+
     const definition = workflow.definition as WorkflowDefinition;
     const explicitTriggerData = isExplicitTriggerData(body.triggerData) ? body.triggerData : null;
 

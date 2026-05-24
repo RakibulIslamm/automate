@@ -128,6 +128,15 @@
   html {
     @apply font-sans;
   }
+
+  /* Fraunces variable-axis tuning for headlines:
+     SOFT 50 — warmer terminals; opsz 36 — display-tuned shapes.
+     The slight negative tracking keeps big display sizes tight. */
+  .font-serif {
+    font-variation-settings: 'SOFT' 50, 'opsz' 36;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
 }
 
 @keyframes loading-dot-bounce {
