@@ -5,3 +5,4 @@ export * from './workflow-run';
 export * from './billing-event';
 export * from './error-log';
 export * from './event-log';
+export * from './byok-key';

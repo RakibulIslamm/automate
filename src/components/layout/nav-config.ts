@@ -2,6 +2,7 @@ import {
   CreditCard,
   Gauge,
   History,
+  KeyRound,
   LayoutGrid,
   Plug,
   Settings,
@@ -36,6 +37,16 @@ export const DASHBOARD_NAV_BOTTOM: NavItem[] = [
   { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
+
+/** Only appended to the bottom nav when BYOK demo mode is active. Lives
+ * in its own constant so the dashboard shell can conditionally include it
+ * without touching the static lists. */
+export const DASHBOARD_NAV_BYOK: NavItem = {
+  href: '/dashboard/byok',
+  label: 'BYOK',
+  icon: KeyRound,
+  description: 'Bring your own API keys (demo mode)',
+};
 
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin', label: 'Overview', icon: LayoutGrid, description: 'Admin home' },

@@ -23,18 +23,21 @@ const serverSchema = z.object({
   AUTH_RESEND_KEY: z.string().min(1),
   RESEND_FROM_EMAIL: z.email('RESEND_FROM_EMAIL must be a valid email address'),
 
-  // AI (OpenRouter → Claude)
-  OPENROUTER_API_KEY: z.string().min(1),
-  OPENROUTER_BASE_URL: z.url('OPENROUTER_BASE_URL must be a valid URL'),
+  // AI (OpenRouter → Claude). Optional in BYOK mode — see BYOK_ENABLE below.
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
+  OPENROUTER_BASE_URL: z.url('OPENROUTER_BASE_URL must be a valid URL').optional(),
 
   // Queue / scheduling (Upstash QStash)
   QSTASH_TOKEN: z.string().min(1),
   QSTASH_CURRENT_SIGNING_KEY: z.string().min(1),
   QSTASH_NEXT_SIGNING_KEY: z.string().min(1),
 
-  // Stripe
-  STRIPE_SECRET_KEY: z.string().min(1),
-  STRIPE_WEBHOOK_SECRET: z.string().min(1),
+  // Stripe — required for billing. Optional only as a developer
+  // convenience so the app boots locally without Stripe configured;
+  // the `stripe()` helper throws a clear typed error when called
+  // without a key.
+  STRIPE_SECRET_KEY: z.string().min(1).optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
   // Per-plan price IDs — configure manually in Stripe dashboard, then paste here.
   STRIPE_STARTER_PRICE_ID: z.string().min(1).optional(),
   STRIPE_STARTER_OVERAGE_PRICE_ID: z.string().min(1).optional(),
@@ -60,11 +63,25 @@ const serverSchema = z.object({
   SLACK_REDIRECT_URI: z.url('SLACK_REDIRECT_URI must be a valid URL').optional(),
   NOTION_CLIENT_ID: z.string().min(1),
   NOTION_CLIENT_SECRET: z.string().min(1),
+
+  // BYOK (Bring Your Own Key) — portfolio/demo mode.
+  // When `true`: AI + Stripe require user-supplied keys saved in Settings.
+  // The BYOK UI section is visible. Platform keys (above) become optional.
+  // When `false` (default): production mode, BYOK UI hidden, platform keys
+  // from env are used for everything.
+  BYOK_ENABLE: z
+    .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
+    .default(false)
+    .transform((v) => v === true || v === 'true' || v === '1'),
+  // Daily AI-call cap per user when falling back to the platform demo key
+  // in BYOK mode. Ignored when BYOK_ENABLE=false.
+  BYOK_DAILY_LIMIT: z.coerce.number().int().min(0).default(10),
 });
 
 const clientSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.url('NEXT_PUBLIC_APP_URL must be a valid URL'),
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(1),
+  // Stripe publishable key — optional in BYOK mode (visitors paste their own).
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(1).optional(),
 });
 
 type ServerEnv = z.infer<typeof serverSchema>;

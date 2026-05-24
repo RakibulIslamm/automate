@@ -34,6 +34,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  if (!env.STRIPE_WEBHOOK_SECRET) {
+    // eslint-disable-next-line no-console
+    console.error('[stripe.webhook] STRIPE_WEBHOOK_SECRET is not configured');
+    return NextResponse.json(
+      { error: { code: 'NOT_CONFIGURED', message: 'Webhook is not configured on this server.' } },
+      { status: 503 },
+    );
+  }
+
   let event: Stripe.Event;
   try {
     event = stripe().webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET);

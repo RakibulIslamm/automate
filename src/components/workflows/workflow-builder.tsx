@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, Loader2, Sparkles, Save, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, KeyRound, Loader2, Sparkles, Save, Play, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -52,6 +53,9 @@ export function WorkflowBuilder() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState<'draft' | 'activate' | null>(null);
+  /** When the build call hits the BYOK gate, we render an inline alert
+   * with a link to /dashboard/byok instead of a generic error toast. */
+  const [byokRequired, setByokRequired] = useState<string | null>(null);
 
   // Rotate placeholder examples every 4s.
   useEffect(() => {
@@ -112,6 +116,7 @@ export function WorkflowBuilder() {
       toast.error('Describe what you want to automate in a few more words.');
       return;
     }
+    setByokRequired(null);
     setPhase('building');
     try {
       const res = await fetch('/api/workflows/build', {
@@ -121,11 +126,14 @@ export function WorkflowBuilder() {
       });
       const payload = (await res.json()) as
         | { data: ApiResult }
-        | { error: { message: string } };
+        | { error: { code?: string; message: string } };
       if (!res.ok || 'error' in payload) {
-        const message =
-          'error' in payload ? payload.error.message : 'Build failed.';
-        toast.error(message);
+        const err = 'error' in payload ? payload.error : { code: undefined, message: 'Build failed.' };
+        if (err.code === 'BYOK_KEY_REQUIRED') {
+          setByokRequired(err.message);
+        } else {
+          toast.error(err.message);
+        }
         setPhase('input');
         return;
       }
@@ -174,6 +182,39 @@ export function WorkflowBuilder() {
             transition={{ duration: 0.25 }}
             className="mx-auto max-w-2xl"
           >
+            {byokRequired ? (
+              <div className="mb-5 flex items-start gap-3 rounded-2xl border border-amber-500/40 bg-amber-50/50 p-5 dark:bg-amber-950/20">
+                <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                  <KeyRound className="size-4" aria-hidden />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-amber-900 dark:text-amber-200">
+                    Add an AI key to use the builder
+                  </p>
+                  <p className="mt-1 text-sm text-amber-800/90 dark:text-amber-300/90">
+                    {byokRequired} It takes ~30 seconds — pick a provider (OpenAI,
+                    Anthropic, OpenRouter, or DeepSeek), paste your key, save.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button asChild size="sm">
+                      <Link href="/dashboard/byok">
+                        <KeyRound className="size-3.5" />
+                        Open BYOK settings
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setByokRequired(null)}
+                      className="text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200"
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <Card>
               <CardContent className="p-6 sm:p-8">
                 <div className="mb-5 flex items-center gap-2 text-sm text-muted-foreground">

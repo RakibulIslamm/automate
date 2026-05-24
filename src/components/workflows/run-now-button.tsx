@@ -49,13 +49,21 @@ export function RunNowButton({
         | { error: { code?: string; message: string } };
       if (!res.ok || 'error' in payload) {
         const err = 'error' in payload ? payload.error : { code: undefined, message: 'Failed to start the run.' };
-        // Quota exceeded → pop the upgrade modal alongside the toast.
         if (err.code === 'QUOTA_EXCEEDED') {
+          // Quota exceeded → pop the upgrade modal alongside the toast.
           toast.error(err.message, {
             action: {
               label: 'Upgrade',
               onClick: () =>
                 window.dispatchEvent(new CustomEvent('automate:show-upgrade-modal')),
+            },
+          });
+        } else if (err.code === 'BYOK_KEY_REQUIRED') {
+          // BYOK gate → offer a one-click jump to the BYOK page.
+          toast.error(err.message, {
+            action: {
+              label: 'Add a key',
+              onClick: () => router.push('/dashboard/byok'),
             },
           });
         } else {

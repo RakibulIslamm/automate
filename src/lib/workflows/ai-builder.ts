@@ -1,14 +1,16 @@
 import 'server-only';
 import { generateText } from 'ai';
 import { z } from 'zod';
-import { claude } from '@/lib/ai/openrouter';
+import { getActiveAi } from '@/lib/byok/get-active-ai';
+import { reserveDemoAiCall } from '@/lib/byok/rate-limit';
+import { env } from '@/lib/env';
 import {
   workflowDefinitionAiResponseSchema,
   type WorkflowDefinition,
 } from './dsl';
 import { validateWorkflow } from './validator';
 import { buildSystemPrompt, type AvailableIntegration } from '@/lib/ai/prompts/workflow-builder';
-import { WorkflowExecutionError } from '@/lib/errors';
+import { ByokKeyRequiredError, WorkflowExecutionError } from '@/lib/errors';
 import { logError } from '@/lib/tracking/log-error';
 
 /**
@@ -78,8 +80,17 @@ export async function buildWorkflowFromPrompt(
 
     let text: string;
     try {
+      const ai = await getActiveAi(input.userId);
+      if (ai.source === 'platform' && env.BYOK_ENABLE) {
+        const gate = await reserveDemoAiCall(input.userId);
+        if (!gate.allowed) {
+          throw new WorkflowExecutionError(
+            `Daily demo limit reached (${gate.cap} AI calls). Add your own API key in Settings → AI provider to keep going.`,
+          );
+        }
+      }
       const result = await generateText({
-        model: claude(),
+        model: ai.model,
         system: `${system}\n\n# Output format\n\nReturn ONE valid JSON object — no prose, no markdown fences. The JSON MUST have exactly these top-level keys:\n  - "suggestedName" (string, ≤ 80 chars)\n  - "suggestedDescription" (string, ≤ 200 chars)\n  - "definition" (the WorkflowDefinition described above)\n\nIf you wrap the JSON in a code fence we strip it, but unfenced raw JSON is preferred.`,
         messages,
         temperature: 0.2,
@@ -90,6 +101,11 @@ export async function buildWorkflowFromPrompt(
       });
       text = result.text;
     } catch (err) {
+      // BYOK gate has its own typed error — pass it through so the UI can
+      // render an inline alert with a link to /dashboard/byok instead of
+      // the generic "AI unavailable" toast.
+      if (err instanceof ByokKeyRequiredError) throw err;
+      if (err instanceof WorkflowExecutionError) throw err;
       await logError(err, {
         source: 'ai-builder.generateText',
         userId: input.userId,

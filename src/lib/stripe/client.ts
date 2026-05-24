@@ -17,6 +17,15 @@ import { ExternalServiceError } from '@/lib/errors';
 let _stripe: Stripe | null = null;
 export function stripe(): Stripe {
   if (!_stripe) {
+    if (!env.STRIPE_SECRET_KEY) {
+      // In BYOK mode the platform key is intentionally absent — callers
+      // should route through `getActiveStripe(userId)` instead. Throw
+      // loudly here so the bad call site is obvious in the stack trace.
+      throw new ExternalServiceError(
+        'Stripe',
+        'Platform Stripe key is not configured. Use getActiveStripe(userId) in BYOK mode.',
+      );
+    }
     _stripe = new Stripe(env.STRIPE_SECRET_KEY, {
       maxNetworkRetries: 2,
       typescript: true,

@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { LogOut } from 'lucide-react';
+import { KeyRound, LogOut } from 'lucide-react';
 import { getCurrentUser } from '@/lib/auth/session';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/layout/page-header';
 import { PLAN_CONFIG } from '@/lib/stripe/plans';
 import type { Plan } from '@/lib/db/models';
+import { env } from '@/lib/env';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -23,6 +24,7 @@ export default async function SettingsPage() {
     .toUpperCase();
 
   const plan = PLAN_CONFIG[(user.plan ?? 'free') as Plan];
+  const byokEnabled = env.BYOK_ENABLE;
 
   return (
     <>
@@ -76,6 +78,40 @@ export default async function SettingsPage() {
             </div>
           </div>
         </section>
+
+        {/* BYOK — only when demo mode is enabled, just a pointer to the dedicated page */}
+        {/* {byokEnabled ? (
+          <section>
+            <SectionHeader
+              title="Demo keys"
+              action={
+                <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  BYOK · demo mode
+                </span>
+              }
+            />
+            <Link
+              href="/dashboard/byok"
+              className="group flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-6 transition-colors hover:border-foreground/30 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex items-start gap-4">
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted text-foreground">
+                  <KeyRound className="size-4" aria-hidden />
+                </div>
+                <div>
+                  <p className="font-medium">Manage your AI provider key</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    This portfolio runs AI on visitor-supplied keys — add yours so the AI features
+                    work without burning the project owner's credits.
+                  </p>
+                </div>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <span className="transition-transform group-hover:translate-x-0.5">Open BYOK →</span>
+              </Button>
+            </Link>
+          </section>
+        ) : null} */}
 
         {/* Session row */}
         <section>

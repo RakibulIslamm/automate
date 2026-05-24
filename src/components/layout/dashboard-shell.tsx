@@ -3,12 +3,17 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ShieldAlert, Menu, X, Command } from 'lucide-react';
+import { ShieldAlert, Menu, X, Command, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UserMenu } from './user-menu';
 import { ThemeToggle } from './theme-toggle';
 import { CommandPalette, openCommandPalette } from './command-palette';
-import { DASHBOARD_NAV_MAIN, DASHBOARD_NAV_BOTTOM, type NavItem } from './nav-config';
+import {
+  DASHBOARD_NAV_BOTTOM,
+  DASHBOARD_NAV_BYOK,
+  DASHBOARD_NAV_MAIN,
+  type NavItem,
+} from './nav-config';
 
 /**
  * Editorial top-nav shell — no sidebar. The whole page is content. Section
@@ -23,16 +28,36 @@ import { DASHBOARD_NAV_MAIN, DASHBOARD_NAV_BOTTOM, type NavItem } from './nav-co
 export interface DashboardShellProps {
   user: { name?: string; email?: string; image?: string };
   isAdmin: boolean;
+  /** Server-resolved flag (mirrors `env.BYOK_ENABLE`). When true the BYOK
+   * nav item is mounted alongside Billing/Settings. Passed from the
+   * server layout so users only need to set ONE env var, not a
+   * client-mirror as well. */
+  byokEnabled?: boolean;
+  /** When true, an attention-pill "Set up AI provider" item appears next
+   * to the regular nav until the user saves an AI key. */
+  byokNeedsAttention?: boolean;
   children: React.ReactNode;
 }
 
-export function DashboardShell({ user, isAdmin, children }: DashboardShellProps) {
+export function DashboardShell({
+  user,
+  isAdmin,
+  byokEnabled = false,
+  byokNeedsAttention = false,
+  children,
+}: DashboardShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const primary: NavItem[] = DASHBOARD_NAV_MAIN;
   const secondary: NavItem[] = [...DASHBOARD_NAV_BOTTOM];
+  if (byokEnabled) secondary.push(DASHBOARD_NAV_BYOK);
   if (isAdmin) secondary.push({ href: '/admin', label: 'Admin', icon: ShieldAlert });
+
+  // Separate, attention-grabbing nav item — only mounted while the user is
+  // in BYOK demo mode and hasn't saved any AI key. Pill-shaped with a rose
+  // background so it stands apart from the regular text-link nav items.
+  const showSetupAction = byokEnabled && byokNeedsAttention;
 
   return (
     <div className="min-h-svh bg-background">
@@ -80,6 +105,24 @@ export function DashboardShell({ user, isAdmin, children }: DashboardShellProps)
           {secondary.map((item) => (
             <SectionLink key={item.href} item={item} pathname={pathname} subtle />
           ))}
+
+          {/* Separate warning-style "set up keys" call to action — pill
+              shape, rose background, only mounted while keys are missing.
+              Auto-disappears the moment the user saves an AI key. */}
+          {showSetupAction ? (
+            <Link
+              href={DASHBOARD_NAV_BYOK.href}
+              aria-label="Set up AI provider"
+              className="ml-2 inline-flex items-center gap-1.5 rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-500/15 dark:text-rose-300"
+            >
+              <span className="relative flex size-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
+              </span>
+              <AlertTriangle className="size-3" aria-hidden />
+              Set up AI provider
+            </Link>
+          ) : null}
         </nav>
 
         <div
@@ -89,6 +132,21 @@ export function DashboardShell({ user, isAdmin, children }: DashboardShellProps)
           )}
         >
           <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
+            {/* Separate warning item — sits above the regular nav so it's
+                the first thing a mobile user sees while demo keys are missing. */}
+            {showSetupAction ? (
+              <Link
+                href={DASHBOARD_NAV_BYOK.href}
+                onClick={() => setMobileOpen(false)}
+                className="mb-1 flex items-center gap-3 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-700 dark:text-rose-300"
+              >
+                <AlertTriangle className="size-4" aria-hidden />
+                <span className="flex-1">Set up AI provider</span>
+                <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                  Required
+                </span>
+              </Link>
+            ) : null}
             {[...primary, ...secondary].map((item) => (
               <Link
                 key={item.href}

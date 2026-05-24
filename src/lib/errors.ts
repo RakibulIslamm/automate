@@ -87,6 +87,30 @@ export class QuotaExceededError extends AppError {
   }
 }
 
+/**
+ * Thrown when an AI or Stripe call hits the BYOK gate (BYOK_ENABLE=true,
+ * no user-saved key). The UI inspects `code === 'BYOK_KEY_REQUIRED'` to
+ * render an inline alert that links to the BYOK settings page, rather
+ * than the generic "AI unavailable" toast.
+ */
+export class ByokKeyRequiredError extends AppError {
+  readonly service: 'ai' | 'stripe';
+
+  constructor(service: 'ai' | 'stripe', message?: string, cause?: unknown) {
+    super({
+      code: 'BYOK_KEY_REQUIRED',
+      statusCode: 402,
+      publicMessage:
+        message ??
+        (service === 'ai'
+          ? "This demo runs on visitors' API keys — add one to use the AI features."
+          : "This demo runs on visitors' Stripe test keys — add one to use billing."),
+      cause,
+    });
+    this.service = service;
+  }
+}
+
 export class IntegrationDisconnectedError extends AppError {
   readonly provider: string;
 
